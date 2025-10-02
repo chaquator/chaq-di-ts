@@ -1,0 +1,18 @@
+{
+  "name": "chaq-di-ts",
+  "version": "1.0.0",
+  "description": "relatively lightweight dependency injection tool written in typescript",
+  "homepage": "https://github.com/chaquator/chaq-di-ts#readme",
+  "bugs": {
+    "url": "https://github.com/chaquator/chaq-di-ts/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chaquator/chaq-di-ts.git"
+  },
+  "license": "MIT",
+  "author": "chaquator",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {}
+}
