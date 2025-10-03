@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { makeDIModuleFactory } from './index.js';
+import { makeDIModuleFactory } from '../src/index.js';
 
 // Utility function for asserting on logs
 const increment = (map: Map<string, number>, ...keys: string[]) => {
@@ -15,36 +15,36 @@ const increment = (map: Map<string, number>, ...keys: string[]) => {
     }
 };
 
-interface TriangleInfo {
-    a: number;
-    b: number;
-    c: number;
-
-    digest: string;
-}
-
-const triangleModuleFactory = makeDIModuleFactory<TriangleInfo>();
-
-const makeTriangleModule = (log?: (statement: string) => void) =>
-    triangleModuleFactory(
-        {
-            a: [],
-            b: [],
-            c: ['a', 'b'],
-            digest: ['a', 'b', 'c'],
-        },
-        {
-            a: () => 3,
-            b: () => 4,
-            c: ({ a, b }) => Math.round(Math.sqrt(a * a + b * b) * 100) / 100,
-            digest: ({ a, b, c }) => `${a}^2 + ${b}^2 = ${c}^2`,
-        },
-        {
-            log,
-        },
-    );
-
 test('Triangle module', async (t) => {
+    interface TriangleInfo {
+        a: number;
+        b: number;
+        c: number;
+
+        digest: string;
+    }
+
+    const triangleInfoModuleFactory = makeDIModuleFactory<TriangleInfo>();
+
+    const makeTriangleInfoModule = (log?: (statement: string) => void) =>
+        triangleInfoModuleFactory(
+            {
+                a: [],
+                b: [],
+                c: ['a', 'b'],
+                digest: ['a', 'b', 'c'],
+            },
+            {
+                a: () => 3,
+                b: () => 4,
+                c: ({ a, b }) => Math.round(Math.sqrt(a * a + b * b) * 100) / 100,
+                digest: ({ a, b, c }) => `${a}^2 + ${b}^2 = ${c}^2`,
+            },
+            {
+                log,
+            },
+        );
+
     const mapExpectedLogs = new Map([
         ['Get digest', 1],
         ['Get a', 2],
@@ -66,11 +66,11 @@ test('Triangle module', async (t) => {
     ]);
 
     const mapActualLogs: Map<string, number> = new Map();
-    const TriangleModule = makeTriangleModule((statement) => increment(mapActualLogs, statement));
+    const TriangleInfoModule = makeTriangleInfoModule((statement) => increment(mapActualLogs, statement));
 
     await t.test('initial', () => {
         // Assert contents are as expected
-        assert.deepStrictEqual(TriangleModule.digest, '3^2 + 4^2 = 5^2');
+        assert.deepStrictEqual(TriangleInfoModule.digest, '3^2 + 4^2 = 5^2');
 
         // Assert correct logs are emitted
         assert.deepStrictEqual(mapActualLogs, mapExpectedLogs);
@@ -78,7 +78,7 @@ test('Triangle module', async (t) => {
 
     // Retrieve digest again, and assert on updated logs
     await t.test('additional retrieval of digest', () => {
-        const _ = TriangleModule.digest;
+        const _ = TriangleInfoModule.digest;
         increment(mapExpectedLogs, 'Get digest', 'Found member digest in map');
 
         // Assert correct logs are emitted, after another retrieval

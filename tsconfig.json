@@ -1,7 +1,11 @@
 {
     "extends": "./tsconfig,base.json",
+    "files": [
+        "./src/index.ts",
+        "./tst/index.ts",
+    ],
     "compilerOptions": {
-        "rootDir": "./src",
+        "rootDir": ".",
         "noEmit": true
     }
 }

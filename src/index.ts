@@ -118,7 +118,7 @@ export function makeDIModuleFactory<T>() {
      *
      * const makeTriangleInfo = makeDIModuleFactory<TriangleInfo>();
      *
-     * const triangleInfoModule = makeTriangleInfo(
+     * const TriangleInfoModule = makeTriangleInfo(
      *     {
      *         a: [],
      *         b: [],
@@ -141,7 +141,7 @@ export function makeDIModuleFactory<T>() {
      *     },
      * );
      *
-     * test('triangle', () => expect(triInfoMdoule.specs).toBe('3^2 + 4^2 = 5^2'));
+     * test('triangle', () => assert.deepStrictEqual(TriangleInfoModule.specs).toBe('3^2 + 4^2 = 5^2'));
      *
      * ```
      */
