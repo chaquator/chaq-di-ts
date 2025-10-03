@@ -1,18 +1,27 @@
 {
-  "name": "chaq-di-ts",
-  "version": "1.0.0",
-  "description": "relatively lightweight dependency injection tool written in typescript",
-  "homepage": "https://github.com/chaquator/chaq-di-ts#readme",
-  "bugs": {
-    "url": "https://github.com/chaquator/chaq-di-ts/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/chaquator/chaq-di-ts.git"
-  },
-  "license": "MIT",
-  "author": "chaquator",
-  "type": "module",
-  "main": "index.js",
-  "scripts": {}
+    "name": "chaq-di-ts",
+    "version": "1.0.0",
+    "description": "relatively lightweight dependency injection tool written in typescript",
+    "homepage": "https://github.com/chaquator/chaq-di-ts#readme",
+    "bugs": {
+        "url": "https://github.com/chaquator/chaq-di-ts/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/chaquator/chaq-di-ts.git"
+    },
+    "license": "MIT",
+    "author": "chaquator",
+    "type": "module",
+    "main": "lib/index.js",
+    "scripts": {
+        "build": "tsc",
+        "clean": "rm -rf lib",
+        "test": "tsx ./src/test.ts"
+    },
+    "devDependencies": {
+        "@types/node": "^24.6.2",
+        "tsx": "^4.20.6",
+        "typescript": "^5.9.3"
+    }
 }
