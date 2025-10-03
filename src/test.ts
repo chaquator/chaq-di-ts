@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
+import test from 'node:test';
 
 import { makeDIModuleFactory } from './index.js';
 
 // Utility function for asserting on logs
-const increment = (map: Map<string, number>, key: string) => {
-    const value = map.get(key);
-    if (value) {
-        map.set(key, value + 1);
-    } else {
-        map.set(key, 1);
+const increment = (map: Map<string, number>, ...keys: string[]) => {
+    for (const key of keys) {
+        const value = map.get(key);
+        if (value) {
+            map.set(key, value + 1);
+        } else {
+            map.set(key, 1);
+        }
     }
 };
 
@@ -41,7 +44,7 @@ const makeTriangleModule = (log?: (statement: string) => void) =>
         },
     );
 
-const test1 = () => {
+test('Triangle module', async (t) => {
     const mapExpectedLogs = new Map([
         ['Get digest', 1],
         ['Get a', 2],
@@ -65,21 +68,20 @@ const test1 = () => {
     const mapActualLogs: Map<string, number> = new Map();
     const TriangleModule = makeTriangleModule((statement) => increment(mapActualLogs, statement));
 
-    // Assert contents are as expected
-    assert.deepStrictEqual(TriangleModule.digest, '3^2 + 4^2 = 5^2');
+    await t.test('initial', () => {
+        // Assert contents are as expected
+        assert.deepStrictEqual(TriangleModule.digest, '3^2 + 4^2 = 5^2');
 
-    // Assert correct logs are emitted
-    assert.deepStrictEqual(mapActualLogs, mapExpectedLogs);
+        // Assert correct logs are emitted
+        assert.deepStrictEqual(mapActualLogs, mapExpectedLogs);
+    });
 
     // Retrieve digest again, and assert on updated logs
-    const _ = TriangleModule.digest;
-    increment(mapExpectedLogs, 'Get digest');
-    increment(mapExpectedLogs, 'Found member digest in map');
+    await t.test('additional retrieval of digest', () => {
+        const _ = TriangleModule.digest;
+        increment(mapExpectedLogs, 'Get digest', 'Found member digest in map');
 
-    // Assert correct logs are emitted, after another retrieval
-    assert.deepStrictEqual(mapActualLogs, mapExpectedLogs);
-};
-
-test1();
-
-console.log('passed');
+        // Assert correct logs are emitted, after another retrieval
+        assert.deepStrictEqual(mapActualLogs, mapExpectedLogs);
+    });
+});
