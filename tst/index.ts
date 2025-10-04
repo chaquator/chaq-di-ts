@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { makeDIModuleFactory } from '../src/index.js';
+import { makeModule, makeInjectorFactory, type DependenciesListRecord } from '../src/index.js';
 
 // Utility function for asserting on logs
 const increment = (map: Map<string, number>, ...keys: string[]) => {
@@ -15,8 +15,8 @@ const increment = (map: Map<string, number>, ...keys: string[]) => {
     }
 };
 
-test('Triangle module', async (t) => {
-    interface TriangleInfo {
+test('Pythagorean triple', async (t) => {
+    interface PythagoreanTriple {
         a: number;
         b: number;
         c: number;
@@ -24,26 +24,7 @@ test('Triangle module', async (t) => {
         digest: string;
     }
 
-    const triangleInfoModuleFactory = makeDIModuleFactory<TriangleInfo>();
-
-    const makeTriangleInfoModule = (log?: (statement: string) => void) =>
-        triangleInfoModuleFactory(
-            {
-                a: [],
-                b: [],
-                c: ['a', 'b'],
-                digest: ['a', 'b', 'c'],
-            },
-            {
-                a: () => 3,
-                b: () => 4,
-                c: ({ a, b }) => Math.round(Math.sqrt(a * a + b * b) * 100) / 100,
-                digest: ({ a, b, c }) => `${a}^2 + ${b}^2 = ${c}^2`,
-            },
-            {
-                log,
-            },
-        );
+    const makePythagoreanTripleModule = makeInjectorFactory<PythagoreanTriple>();
 
     const mapExpectedLogs = new Map([
         ['Get digest', 1],
@@ -66,22 +47,137 @@ test('Triangle module', async (t) => {
     ]);
 
     const mapActualLogs: Map<string, number> = new Map();
-    const TriangleInfoModule = makeTriangleInfoModule((statement) => increment(mapActualLogs, statement));
+    const log = (statement: string) => increment(mapActualLogs, statement);
 
-    await t.test('initial', () => {
+    const PythagoreanTripleModule = makePythagoreanTripleModule(
+        {
+            a: [],
+            b: [],
+            c: ['a', 'b'],
+            digest: ['a', 'b', 'c'],
+        },
+        {
+            a: () => 3,
+            b: () => 4,
+            c: ({ a, b }) => Math.round(Math.sqrt(a * a + b * b) * 100) / 100,
+            digest: ({ a, b, c }) => `${a}^2 + ${b}^2 = ${c}^2`,
+        },
+        {
+            log,
+        },
+    );
+
+    await t.test('Initial', () => {
         // Assert contents are as expected
-        assert.deepStrictEqual(TriangleInfoModule.digest, '3^2 + 4^2 = 5^2');
+        assert.deepStrictEqual(PythagoreanTripleModule.digest, '3^2 + 4^2 = 5^2');
 
         // Assert correct logs are emitted
         assert.deepStrictEqual(mapActualLogs, mapExpectedLogs);
     });
 
     // Retrieve digest again, and assert on updated logs
-    await t.test('additional retrieval of digest', () => {
-        const _ = TriangleInfoModule.digest;
+    await t.test('Additional retrieval of digest', () => {
+        const _ = PythagoreanTripleModule.digest;
         increment(mapExpectedLogs, 'Get digest', 'Found member digest in map');
 
         // Assert correct logs are emitted, after another retrieval
         assert.deepStrictEqual(mapActualLogs, mapExpectedLogs);
     });
+});
+
+test('Cycles', async (t) => {
+    interface ABCs {
+        a: number;
+        b: number;
+        c: number;
+    }
+
+    const ONE = () => 1;
+
+    const makeABCs = makeInjectorFactory<ABCs>();
+
+    await t.test('Self loop', () =>
+        assert.throws(() =>
+            makeABCs(
+                {
+                    a: ['a'],
+                    b: ['b'],
+                    c: ['c'],
+                },
+                {
+                    a: ONE,
+                    b: ONE,
+                    c: ONE,
+                },
+                {
+                    checkForCycles: true,
+                },
+            ),
+        ),
+    );
+
+    await t.test('2-way loop', () =>
+        assert.throws(() =>
+            makeABCs(
+                {
+                    a: ['b'],
+                    b: ['a'],
+                    c: [],
+                },
+                {
+                    a: ONE,
+                    b: ONE,
+                    c: ONE,
+                },
+                {
+                    checkForCycles: true,
+                },
+            ),
+        ),
+    );
+
+    await t.test('3-way loop', () =>
+        assert.throws(() =>
+            makeABCs(
+                {
+                    a: ['b'],
+                    b: ['c'],
+                    c: ['a'],
+                },
+                {
+                    a: ONE,
+                    b: ONE,
+                    c: ONE,
+                },
+                {
+                    checkForCycles: true,
+                },
+            ),
+        ),
+    );
+});
+
+test('Split usage', async (t) => {
+    interface FooBar {
+        foo: string;
+        bar: string;
+
+        combined: string;
+    }
+
+    const fooBarDependencies = {
+        foo: [],
+        bar: [],
+        combined: ['foo', 'bar'],
+    } satisfies DependenciesListRecord<FooBar>;
+
+    const fooBraModule = makeModule<FooBar, typeof fooBarDependencies>({
+        foo: () => 'foo',
+        bar: () => 'bar',
+        combined: ({ foo, bar }) => `${foo}${bar}`,
+    });
+
+    const fooBarInjector = makeInjectorFactory<FooBar>()(fooBarDependencies, fooBraModule);
+
+    assert.equal('foobar', fooBarInjector.combined);
 });

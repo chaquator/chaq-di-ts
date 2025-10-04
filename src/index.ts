@@ -1,19 +1,19 @@
 /**
  * Dependencies list: An array of the names of the members in the interface, which a given member depends on.
  */
-type DepsList<T> = readonly (keyof T)[];
+type DependenciesList<T> = readonly (keyof T)[];
 
 /**
  * In dependencies record, provide, for each member of the interface, an array of the names of the other members
  * in the interface which the current member depends on.
  */
-type DepsRecords<T> = Record<keyof T, DepsList<T>>;
+export type DependenciesListRecord<T> = Record<keyof T, DependenciesList<T>>;
 
 /**
  * Maps the list/tuple of member names in a dependencies list to a record mapping the member name to the corresponding
  * type in the interface
  */
-type RecordDepsFromDepsList<T, L extends DepsList<T>> = {
+type RecordDepsFromDepsList<T, L extends DependenciesList<T>> = {
     [Key in L[number]]: T[Key];
 };
 
@@ -21,7 +21,7 @@ type RecordDepsFromDepsList<T, L extends DepsList<T>> = {
  * Interface which maps names of members in the interface, to a function, accepting an arguments object
  * containing the member's dependencies as fields, which provides the member.
  */
-type MemberProviderInterface<T, D extends DepsRecords<T>> = {
+export type MemberProviderModule<T, D extends DependenciesListRecord<T>> = {
     [K in keyof T]: T[K] extends undefined | null | void ? never : (args: RecordDepsFromDepsList<T, D[K]>) => T[K];
 };
 
@@ -40,13 +40,13 @@ export interface DIOptions {
  *
  * @returns DI module factory for the given interface
  */
-export function makeDIModuleFactory<T>() {
+export function makeInjectorFactory<T>() {
     /**
      * Check dependencies for any cycles
      * @param dependencies - Dependency graph for desired DI module
      * @returns `true` if dependencies has any cycles
      */
-    const anyCycilcDependencies = <D extends DepsRecords<T>>(dependencies: D): boolean => {
+    const anyCycilcDependencies = <D extends DependenciesListRecord<T>>(dependencies: D): boolean => {
         enum VisitState {
             VISITNG,
             VISITED,
@@ -109,45 +109,37 @@ export function makeDIModuleFactory<T>() {
      *
      * @example
      * ```
-     * interface TriangleInfo {
+     * interface PythagoreanTriple {
      *     a: number;
      *     b: number;
      *     c: number;
-     *     specs: string;
+     *     digest: string;
      * }
      *
-     * const makeTriangleInfo = makeDIModuleFactory<TriangleInfo>();
+     * const makePythagoreanTripleModule = makeInjectorFactory<PythagoreanTriple>();
      *
-     * const TriangleInfoModule = makeTriangleInfo(
+     * const PythagoreanTripleModule = makePythagoreanTripleModule(
      *     {
      *         a: [],
      *         b: [],
      *         c: ['a', 'b'],
-     *         specs: ['a', 'b', 'c'],
+     *         digest: ['a', 'b', 'c'],
      *     },
      *     {
-     *         a() {
-     *             return 3;
-     *         },
-     *         b() {
-     *             return 4;
-     *         },
-     *         c({ a, b }) {
-     *             return Math.pow(Math.pow(a, 2) + Math.pow(b, 2), 0.5);
-     *         },
-     *         specs({ a, b, c }) {
-     *             return `${a}^2 + ${b}^2 = ${c}^2`;
-     *         },
-     *     },
+     *         a: () => 3,
+     *         b: () => 4,
+     *         c: ({ a, b }) => Math.round(Math.sqrt(a * a + b * b) * 100) / 100,
+     *         digest: ({ a, b, c }) => `${a}^2 + ${b}^2 = ${c}^2`,
+     *     }
      * );
      *
-     * test('triangle', () => assert.deepStrictEqual(TriangleInfoModule.specs).toBe('3^2 + 4^2 = 5^2'));
+     * test('triangle', () => assert.deepStrictEqual(PythagoreanTripleModule.digest).toBe('3^2 + 4^2 = 5^2'));
      *
      * ```
      */
-    const diFactory = <const D extends DepsRecords<T>>(
+    const injectorFactory = <const D extends DependenciesListRecord<T>>(
         dependencies: D,
-        memberProviders: MemberProviderInterface<T, D>,
+        memberProviders: MemberProviderModule<T, D>,
         options?: DIOptions,
     ): T => {
         // First check for any cycles
@@ -190,7 +182,7 @@ export function makeDIModuleFactory<T>() {
                 );
 
                 // Pass into provider to make member
-                const memberProvider = memberProviders[member as unknown as keyof MemberProviderInterface<T, D>];
+                const memberProvider = memberProviders[member as unknown as keyof MemberProviderModule<T, D>];
                 const memberObject = memberProvider(memberDeps);
 
                 // Set in map for later retrieval
@@ -212,5 +204,23 @@ export function makeDIModuleFactory<T>() {
         return finishedModule as T;
     };
 
-    return diFactory;
+    return injectorFactory;
 }
+
+export function makeModule<T, const D extends DependenciesListRecord<T>>(
+    memberProviders: MemberProviderModule<T, D>,
+): MemberProviderModule<T, D> {
+    return memberProviders;
+}
+
+/**
+ * Terminology:
+ * - Component/Interface - Collection of members that have some dependency on each other in order to be constructed
+ * - Members - Individual object in a component, has a name and a type
+ * - Dependencies - For a given member, a list of other members which need to be constructed first, as this member
+ *     requires them during its creation
+ * - Module - Instructions describing how to construct each member given its dependencies
+ * - Injector - Finished implementation of component which constructs members based on the provided module
+ */
+
+// TODO: update doc comments

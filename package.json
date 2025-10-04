@@ -17,7 +17,7 @@
     "scripts": {
         "build": "tsc",
         "clean": "rm -rf lib",
-        "test": "tsx ./src/test.ts"
+        "test": "node --import tsx --test ./tst/*.ts"
     },
     "devDependencies": {
         "@types/node": "^24.6.2",
