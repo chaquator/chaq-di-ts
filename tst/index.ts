@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { makeModule, makeInjectorFactory, type DependenciesListRecord } from '../src/index.js';
+import { makeInjectorFactory, type DependenciesListRecord, type MemberProviderModule } from '../src/index.js';
 
 // Utility function for asserting on logs
 const increment = (map: Map<string, number>, ...keys: string[]) => {
@@ -27,23 +27,23 @@ test('Pythagorean triple', async (t) => {
     const makePythagoreanTripleModule = makeInjectorFactory<PythagoreanTriple>();
 
     const mapExpectedLogs = new Map([
-        ['Get digest', 1],
-        ['Get a', 2],
-        ['Get b', 2],
-        ['Get c', 1],
+        ['digest - get', 1],
+        ['a - get', 2],
+        ['b - get', 2],
+        ['c - get', 1],
 
-        ['Member digest not found in map. Constructing...', 1],
-        ['Member a not found in map. Constructing...', 1],
-        ['Member b not found in map. Constructing...', 1],
-        ['Member c not found in map. Constructing...', 1],
+        ['digest - constructing', 1],
+        ['a - constructing', 1],
+        ['b - constructing', 1],
+        ['c - constructing', 1],
 
-        ['Member digest constructed and saved to map', 1],
-        ['Member a constructed and saved to map', 1],
-        ['Member b constructed and saved to map', 1],
-        ['Member c constructed and saved to map', 1],
+        ['digest - constructed', 1],
+        ['a - constructed', 1],
+        ['b - constructed', 1],
+        ['c - constructed', 1],
 
-        ['Found member a in map', 1],
-        ['Found member b in map', 1],
+        ['a - already constructed', 1],
+        ['b - already constructed', 1],
     ]);
 
     const mapActualLogs: Map<string, number> = new Map();
@@ -77,8 +77,11 @@ test('Pythagorean triple', async (t) => {
 
     // Retrieve digest again, and assert on updated logs
     await t.test('Additional retrieval of digest', () => {
-        const _ = PythagoreanTripleModule.digest;
-        increment(mapExpectedLogs, 'Get digest', 'Found member digest in map');
+        // Re-retrieve
+        assert.deepStrictEqual(PythagoreanTripleModule.digest, '3^2 + 4^2 = 5^2');
+
+        // Increment logs based on retrieval
+        increment(mapExpectedLogs, 'digest - get', 'digest - already constructed');
 
         // Assert correct logs are emitted, after another retrieval
         assert.deepStrictEqual(mapActualLogs, mapExpectedLogs);
@@ -86,15 +89,32 @@ test('Pythagorean triple', async (t) => {
 });
 
 test('Cycles', async (t) => {
+    /**
+     * Tests demonstrating functionality to catch cycles. Currently, the moment when a cycle is caught, an exception
+     * is thrown, without further exploring the dependency graph for any other cycles.
+     */
+
     interface ABCs {
         a: number;
         b: number;
         c: number;
     }
 
-    const ONE = () => 1;
+    interface ABCDEFGH {
+        a: number;
+        b: number;
+        c: number;
+        d: number;
+        e: number;
+        f: number;
+        g: number;
+        h: number;
+    }
+
+    const UNUSED = {} as any;
 
     const makeABCs = makeInjectorFactory<ABCs>();
+    const makeABCDEFGH = makeInjectorFactory<ABCDEFGH>();
 
     await t.test('Self loop', () =>
         assert.throws(() =>
@@ -104,14 +124,7 @@ test('Cycles', async (t) => {
                     b: ['b'],
                     c: ['c'],
                 },
-                {
-                    a: ONE,
-                    b: ONE,
-                    c: ONE,
-                },
-                {
-                    checkForCycles: true,
-                },
+                UNUSED,
             ),
         ),
     );
@@ -124,14 +137,7 @@ test('Cycles', async (t) => {
                     b: ['a'],
                     c: [],
                 },
-                {
-                    a: ONE,
-                    b: ONE,
-                    c: ONE,
-                },
-                {
-                    checkForCycles: true,
-                },
+                UNUSED,
             ),
         ),
     );
@@ -144,20 +150,42 @@ test('Cycles', async (t) => {
                     b: ['c'],
                     c: ['a'],
                 },
+                UNUSED,
+            ),
+        ),
+    );
+
+    await t.test('DSA 3 ed 616', () =>
+        assert.throws(() =>
+            makeABCDEFGH(
                 {
-                    a: ONE,
-                    b: ONE,
-                    c: ONE,
+                    a: ['b'],
+                    b: ['c', 'f'],
+                    c: ['d', 'g'],
+                    d: ['c', 'h'],
+                    e: ['a', 'f'],
+                    f: ['g'],
+                    g: ['f', 'h'],
+                    h: ['h'],
                 },
-                {
-                    checkForCycles: true,
-                },
+                UNUSED,
             ),
         ),
     );
 });
 
 test('Split usage', async (t) => {
+    /**
+     * Test showing declaration of the interface, the dependencies, and finally the module separately, instead of all
+     * inline.
+     *
+     * DependenciesListRecord<T> lets you define dependencies for an interface T. MemberProviderModule<T, D> takes an
+     * interface T, and a dependencies list record D, which is a dependencies list record of T.
+     *
+     * Then to make the injector, you pass the interface T as a template type to `makeInjectorFactory`, and then pass
+     * the dependencies and corresponding module into the returned factory function.
+     */
+
     interface FooBar {
         foo: string;
         bar: string;
@@ -171,11 +199,11 @@ test('Split usage', async (t) => {
         combined: ['foo', 'bar'],
     } satisfies DependenciesListRecord<FooBar>;
 
-    const fooBraModule = makeModule<FooBar, typeof fooBarDependencies>({
+    const fooBraModule: MemberProviderModule<FooBar, typeof fooBarDependencies> = {
         foo: () => 'foo',
         bar: () => 'bar',
         combined: ({ foo, bar }) => `${foo}${bar}`,
-    });
+    };
 
     const fooBarInjector = makeInjectorFactory<FooBar>()(fooBarDependencies, fooBraModule);
 

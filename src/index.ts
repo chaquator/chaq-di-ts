@@ -1,4 +1,14 @@
 /**
+ * DI Terminology
+ * - Interface - Collection of members that have some dependency on each other in order to be constructed
+ * - Members - Individual object in a interface, has a name and a type
+ * - Dependencies - For a given member, a list of other members which need to be constructed first, as this member
+ *     requires them during its creation
+ * - Module - Instructions describing how to construct each member given its dependencies
+ * - Injector - Finished implementation of interface which constructs members based on the provided module
+ */
+
+/**
  * Dependencies list: An array of the names of the members in the interface, which a given member depends on.
  */
 type DependenciesList<T> = readonly (keyof T)[];
@@ -7,159 +17,121 @@ type DependenciesList<T> = readonly (keyof T)[];
  * In dependencies record, provide, for each member of the interface, an array of the names of the other members
  * in the interface which the current member depends on.
  */
-export type DependenciesListRecord<T> = Record<keyof T, DependenciesList<T>>;
+export type DependenciesListRecord<I> = Record<keyof I, DependenciesList<I>>;
 
 /**
  * Maps the list/tuple of member names in a dependencies list to a record mapping the member name to the corresponding
  * type in the interface
  */
-type RecordDepsFromDepsList<T, L extends DependenciesList<T>> = {
-    [Key in L[number]]: T[Key];
+type RecordDepsFromDepsList<I, L extends DependenciesList<I>> = {
+    [Key in L[number]]: I[Key];
 };
 
 /**
- * Interface which maps names of members in the interface, to a function, accepting an arguments object
- * containing the member's dependencies as fields, which provides the member.
+ * Type which maps names of members in the interface, to a function returning the constructed memebr, given an arguments
+ * object containing the member's dependencies
  */
-export type MemberProviderModule<T, D extends DependenciesListRecord<T>> = {
-    [K in keyof T]: T[K] extends undefined | null | void ? never : (args: RecordDepsFromDepsList<T, D[K]>) => T[K];
+export type MemberProviderModule<I, D extends DependenciesListRecord<I>> = {
+    [K in keyof I]: (args: RecordDepsFromDepsList<I, D[K]>) => I[K];
 };
 
 /**
- * Dependency injection options;
- * - checkForCycles - Check dependency graph for cycles. Turn off to spare performance once validated
+ * Check dependencies for any cycles
+ * @template I - interface
+ * @param dependencies - Dependency graph for interface `I`
+ * @returns `true` if dependencies has any cycles. `false` otherwise
  */
-export interface DIOptions {
+const anyCycilcDependencies = <I>(dependencies: DependenciesListRecord<I>): boolean => {
+    enum VisitState {
+        VISITNG,
+        VISITED,
+    }
+
+    const visitaitonMap: Map<keyof I, VisitState> = new Map();
+
+    const dfsVisit = (key: keyof I): boolean => {
+        const neighbors = dependencies[key];
+
+        if (neighbors.length > 0) {
+            visitaitonMap.set(key, VisitState.VISITNG);
+            for (const neighbor of neighbors) {
+                if (neighbor == key) {
+                    return true;
+                }
+
+                const neighborVisitState = visitaitonMap.get(neighbor);
+
+                if (neighborVisitState !== undefined && neighborVisitState === VisitState.VISITNG) {
+                    return true;
+                } else if (dfsVisit(neighbor)) {
+                    return true;
+                }
+            }
+        }
+
+        visitaitonMap.set(key, VisitState.VISITED);
+        return false;
+    };
+
+    for (const key in dependencies) {
+        const visitState = visitaitonMap.get(key);
+        if (visitState === undefined && dfsVisit(key)) {
+            return true;
+        }
+    }
+
+    return false;
+};
+
+export interface DependencyInjectionOptions {
+    /**
+     * Check dependencies for cycles on creation of injector. Can be disabled in case of performance concerns.
+     * @default true
+     */
     checkForCycles?: boolean;
+
+    /**
+     * Logging callback for listening in on injector usage.
+     * @param statement Log statement from injector.
+     */
     log?: (statement: string) => void;
 }
 
 /**
- * Function which creates a dependency injection factory given a DI module interface type. In the interface,
- * `null`, `undefined`, and `void` are disallowed.
+ * Create factory for an injector for a given interface I.
  *
- * @returns DI module factory for the given interface
+ * NOTE: Using function "currying" because TypeScript makes you provide either no type arguments or all of them.
+ * Unfortunately, using type defaults gets in the way of being able to have autocomplete on a type, while also keeping
+ * the very specific type (we need to know the *exact* type of `dependencies` in order to determine the type for
+ * `module`)
+ *
+ * @template I - Interface type
+ * @returns Injector factory for `I`
  */
-export function makeInjectorFactory<T>() {
-    /**
-     * Check dependencies for any cycles
-     * @param dependencies - Dependency graph for desired DI module
-     * @returns `true` if dependencies has any cycles
-     */
-    const anyCycilcDependencies = <D extends DependenciesListRecord<T>>(dependencies: D): boolean => {
-        enum VisitState {
-            VISITNG,
-            VISITED,
-        }
-
-        const visitaitonMap: Map<keyof D, VisitState> = new Map();
-
-        const dfsVisit = (key: keyof D): boolean => {
-            const neighbors = dependencies[key];
-
-            if (neighbors.length > 0) {
-                visitaitonMap.set(key, VisitState.VISITNG);
-                for (const neighbor of neighbors) {
-                    if (neighbor == key) {
-                        return true;
-                    }
-
-                    const neighborVisitState = visitaitonMap.get(neighbor);
-
-                    if (neighborVisitState !== undefined && neighborVisitState === VisitState.VISITNG) {
-                        return true;
-                    } else if (dfsVisit(neighbor)) {
-                        return true;
-                    }
-                }
-            }
-
-            visitaitonMap.set(key, VisitState.VISITED);
-            return false;
-        };
-
-        for (const key in dependencies) {
-            const visitState = visitaitonMap.get(key);
-            if (visitState === undefined && dfsVisit(key)) {
-                return true;
-            }
-        }
-
-        return false;
-    };
-
-    /**
-     * Dependency injection module factory which, when provided a dependency graph and providers, constructs
-     * a module that will create all of its members according to their dependencies and providers
-     *
-     * @param dependencies - Record which maps member names from the module interface to a list of other member names
-     * which the given member depends on to be created.
-     *
-     * @param memberProviders - Record that maps member names from the module interface to a function, which accepts
-     * its dependencies (specified in `dependencies` parameter) within the fields of a singular arguments object parameter,
-     * and returns the appropriate type corresponding to the module interface.
-     *
-     * If `dependencies` is passed in correctly, autocomplete when destructuring the arguments object should
-     * show the correct dependency members and their types. See the example and unit tests.
-     *
-     * @param options - DI options
-     *
-     * @returns DI module which matches input interface and each property is a lazy getter, which constructs its
-     * member value given its dependencies
-     *
-     * @example
-     * ```
-     * interface PythagoreanTriple {
-     *     a: number;
-     *     b: number;
-     *     c: number;
-     *     digest: string;
-     * }
-     *
-     * const makePythagoreanTripleModule = makeInjectorFactory<PythagoreanTriple>();
-     *
-     * const PythagoreanTripleModule = makePythagoreanTripleModule(
-     *     {
-     *         a: [],
-     *         b: [],
-     *         c: ['a', 'b'],
-     *         digest: ['a', 'b', 'c'],
-     *     },
-     *     {
-     *         a: () => 3,
-     *         b: () => 4,
-     *         c: ({ a, b }) => Math.round(Math.sqrt(a * a + b * b) * 100) / 100,
-     *         digest: ({ a, b, c }) => `${a}^2 + ${b}^2 = ${c}^2`,
-     *     }
-     * );
-     *
-     * test('triangle', () => assert.deepStrictEqual(PythagoreanTripleModule.digest).toBe('3^2 + 4^2 = 5^2'));
-     *
-     * ```
-     */
-    const injectorFactory = <const D extends DependenciesListRecord<T>>(
+export function makeInjectorFactory<I extends Record<string, any>>() {
+    return <const D extends DependenciesListRecord<I>>(
         dependencies: D,
-        memberProviders: MemberProviderModule<T, D>,
-        options?: DIOptions,
-    ): T => {
+        module: MemberProviderModule<I, D>,
+        options?: DependencyInjectionOptions,
+    ): I => {
         // First check for any cycles
-        if (options?.checkForCycles) {
-            if (anyCycilcDependencies(dependencies)) {
+        if (options?.checkForCycles ?? true) {
+            if (anyCycilcDependencies<I>(dependencies)) {
                 throw new Error('Dependency graph has cycle');
             }
         }
 
         // Initialize map of member name to created member objects
-        const mapModuleObjects: Map<keyof D, T[keyof T]> = new Map();
+        const mapModuleObjects: Map<keyof D, I[keyof I]> = new Map();
 
         // Create functions for each member based on dependencies and providers
-        const finishedModule: any = {};
+        const finishedInjector: any = {};
         for (const member in dependencies) {
             const memberDepsNames = dependencies[member];
 
             const get = () => {
                 if (options?.log) {
-                    options.log(`Get ${member}`);
+                    options.log(`${member} - get`);
                 }
 
                 // Check map for if member was already made
@@ -167,60 +139,44 @@ export function makeInjectorFactory<T>() {
 
                 if (tryGet != undefined) {
                     if (options?.log) {
-                        options.log(`Found member ${member} in map`);
+                        options.log(`${member} - already constructed`);
                     }
                     return tryGet;
                 }
 
                 if (options?.log) {
-                    options.log(`Member ${member} not found in map. Constructing...`);
+                    options.log(`${member} - constructing`);
                 }
 
-                // Get all dependencies from finishedModule
-                const memberDeps: any = Object.fromEntries(
-                    memberDepsNames.values().map((depName) => [depName, finishedModule[depName]] as const),
-                );
+                // Get all dependencies from the finished injector
+                // By the time we're actually reaching this code, getters for each member are populated,
+                // and (ideally) there are no cycles, so these members will be constructed first and exit.
+                const memberDeps = Object.fromEntries(
+                    memberDepsNames.values().map((depName) => [depName, (finishedInjector as I)[depName]] as const),
+                ) as RecordDepsFromDepsList<I, D[keyof I]>;
 
                 // Pass into provider to make member
-                const memberProvider = memberProviders[member as unknown as keyof MemberProviderModule<T, D>];
+                const memberProvider = module[member as keyof MemberProviderModule<I, D>];
                 const memberObject = memberProvider(memberDeps);
 
                 // Set in map for later retrieval
                 mapModuleObjects.set(member, memberObject);
 
                 if (options?.log) {
-                    options.log(`Member ${member} constructed and saved to map`);
+                    options.log(`${member} - constructed`);
                 }
 
                 return memberObject;
             };
 
-            Object.defineProperty(finishedModule, member, {
+            Object.defineProperty(finishedInjector, member, {
                 enumerable: true,
                 get,
             });
         }
 
-        return finishedModule as T;
+        return finishedInjector as I;
     };
-
-    return injectorFactory;
 }
-
-export function makeModule<T, const D extends DependenciesListRecord<T>>(
-    memberProviders: MemberProviderModule<T, D>,
-): MemberProviderModule<T, D> {
-    return memberProviders;
-}
-
-/**
- * Terminology:
- * - Component/Interface - Collection of members that have some dependency on each other in order to be constructed
- * - Members - Individual object in a component, has a name and a type
- * - Dependencies - For a given member, a list of other members which need to be constructed first, as this member
- *     requires them during its creation
- * - Module - Instructions describing how to construct each member given its dependencies
- * - Injector - Finished implementation of component which constructs members based on the provided module
- */
 
 // TODO: update doc comments
