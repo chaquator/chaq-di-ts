@@ -35,6 +35,118 @@ export type MemberProviderModule<I, D extends DependenciesListRecord<I>> = {
     [K in keyof I]: (args: RecordDepsFromDepsList<I, D[K]>) => I[K];
 };
 
+const completeCycleCheck = <I>(dependencies: DependenciesListRecord<I>) => {
+    enum VisitState {
+        VISITING,
+        VISITED,
+    }
+
+    type Node = keyof I;
+
+    type VisitingInfo = {
+        state: VisitState.VISITING;
+        visitIdx: number;
+        minCycleNeighborIdx: number;
+    };
+
+    type VisitedInfo = {
+        state: VisitState.VISITED;
+        minCycleNeighborIdx: number;
+        cycleParent: Node;
+    };
+
+    type NodeInfo = VisitingInfo | VisitedInfo;
+
+    const nodeInfoMap: Map<Node, NodeInfo> = new Map();
+    const visitOrderedList: Node[] = [];
+    const setSelfCycle: Set<Node> = new Set();
+
+    let cycles = false;
+
+    // Pre-condition: key is not yet visited
+    const dfsVisit = (key: Node) => {
+        console.info(`visit ${String(key)}`);
+        const neighbors = dependencies[key];
+
+        // Add to visit list (for key lookup + visit order index)
+        const visitIdx = visitOrderedList.length;
+        visitOrderedList.push(key);
+
+        // Construct node info as object so we have a reference to it to update
+        let nodeInfo: NodeInfo = {
+            state: VisitState.VISITING,
+            visitIdx,
+            minCycleNeighborIdx: visitIdx,
+        };
+
+        // Set visit info as our info
+        nodeInfoMap.set(key, nodeInfo);
+
+        for (const neighbor of neighbors) {
+            console.info(`key ${String(key)} neighbor ${String(neighbor)}`);
+
+            if (neighbor === key) {
+                setSelfCycle.add(key);
+                cycles = true;
+                continue;
+            }
+
+            let neighborInfo = nodeInfoMap.get(neighbor);
+            if (neighborInfo === undefined) {
+                // Unvisited, visit...
+                dfsVisit(neighbor);
+                const neighborInfo = nodeInfoMap.get(neighbor)!;
+                console.info(
+                    `key ${String(key)} (${nodeInfo.minCycleNeighborIdx}) after visiting neighbor ${String(neighbor)} (${
+                        neighborInfo.minCycleNeighborIdx
+                    })`,
+                );
+                nodeInfo.minCycleNeighborIdx = Math.min(nodeInfo.minCycleNeighborIdx, neighborInfo.minCycleNeighborIdx);
+                console.info(nodeInfoMap);
+            } else if (neighborInfo.state === VisitState.VISITING) {
+                cycles = true;
+                console.info(
+                    `key ${String(key)} (${nodeInfo.minCycleNeighborIdx}) visiting neighbor ${String(neighbor)} (${
+                        neighborInfo.minCycleNeighborIdx
+                    })`,
+                );
+                // Visiting, we want to record some stuff here
+                nodeInfo.minCycleNeighborIdx = Math.min(nodeInfo.minCycleNeighborIdx, neighborInfo.minCycleNeighborIdx);
+            }
+        }
+
+        console.info('post edge visit node info', key, nodeInfo);
+
+        nodeInfo = {
+            state: VisitState.VISITED,
+            minCycleNeighborIdx: nodeInfo.minCycleNeighborIdx,
+            cycleParent: visitOrderedList[nodeInfo.minCycleNeighborIdx]!,
+        };
+        nodeInfoMap.set(key, nodeInfo);
+
+        console.info('node info', key, nodeInfo);
+        console.info(`exit visit ${String(key)}`);
+    };
+
+    for (const node in dependencies) {
+        console.info(`chaq ${node}`);
+        const nodeInfo = nodeInfoMap.get(node);
+        if (nodeInfo === undefined) {
+            dfsVisit(node);
+        }
+    }
+
+    console.info('final', nodeInfoMap);
+
+    if (!cycles) return;
+
+    // TODO: routine:
+    // - resolve parents (have to dive until for a node it is its own parent)
+    // - print self cycles
+    // - collect cycles by parent
+    // - print in ascending order by size
+};
+
 /**
  * Check dependencies for any cycles
  * @template I - interface
@@ -116,9 +228,11 @@ export function makeInjectorFactory<I extends Record<string, any>>() {
     ): I => {
         // First check for any cycles
         if (options?.checkForCycles ?? true) {
-            if (anyCycilcDependencies<I>(dependencies)) {
-                throw new Error('Dependency graph has cycle');
-            }
+            // if (anyCycilcDependencies(dependencies)) {
+            //     throw new Error('Dependency graph has cycle');
+            // }
+            completeCycleCheck(dependencies);
+            throw new Error('Dependency graph has cycle');
         }
 
         // Initialize map of member name to created member objects

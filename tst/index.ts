@@ -88,7 +88,8 @@ test('Pythagorean triple', async (t) => {
     });
 });
 
-test('Cycles', async (t) => {
+test('Cycles', { only: true }, async (t) => {
+    t.runOnly(true);
     /**
      * Tests demonstrating functionality to catch cycles. Currently, the moment when a cycle is caught, an exception
      * is thrown, without further exploring the dependency graph for any other cycles.
@@ -155,18 +156,31 @@ test('Cycles', async (t) => {
         ),
     );
 
-    await t.test('DSA 3 ed 616', () =>
+    await t.test('SCC', { only: false }, () =>
         assert.throws(() =>
             makeABCDEFGH(
                 {
                     a: ['b'],
-                    b: ['c', 'f'],
+                    b: ['c', 'e', 'f'],
                     c: ['d', 'g'],
                     d: ['c', 'h'],
                     e: ['a', 'f'],
                     f: ['g'],
-                    g: ['f', 'h'],
-                    h: ['h'],
+                    g: ['f'],
+                    h: ['d', 'g', 'h'],
+                },
+                UNUSED,
+            ),
+        ),
+    );
+
+    await t.test('SCC 2', { only: true }, () =>
+        assert.throws(() =>
+            makeABCs(
+                {
+                    a: ['b'],
+                    b: ['c', 'a'],
+                    c: ['b'],
                 },
                 UNUSED,
             ),
