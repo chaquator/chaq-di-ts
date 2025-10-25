@@ -1,8 +1,8 @@
 {
     "compilerOptions": {
         "module": "nodenext",
-        "target": "esnext",
-        "lib": ["ESNext"],
+        "target": "es2019",
+        "lib": ["ES2019"],
         "sourceMap": true,
         "declaration": true,
         "declarationMap": true,

@@ -45,8 +45,8 @@ export class CyclicDependencyError extends Error {
         this.name = 'CyclicDependencyError';
 
         this.cycles = cycles
-            ?.map((list) => list.toSorted())
-            .toSorted((a, b) => {
+            ?.map((list) => Array.from(list).sort())
+            .sort((a, b) => {
                 const lenCmp = a.length - b.length;
 
                 // Sort by length first
@@ -125,13 +125,12 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
             let neighborInfo = mapNodeInfo.get(neighbor);
             if (neighborInfo === undefined) {
                 // Unvisited, visit this neigbor
-                const neighborInfo = dfsVisit(neighbor);
-                nodeInfo.minVisitIdx = Math.min(nodeInfo.minVisitIdx, neighborInfo.minVisitIdx);
+                neighborInfo = dfsVisit(neighbor);
             } else if (neighborInfo.state === VisitState.VISITING) {
                 // Neighbor is in the middle of being visited, means there is a cycle
                 cycles = true;
-                nodeInfo.minVisitIdx = Math.min(nodeInfo.minVisitIdx, neighborInfo.minVisitIdx);
             }
+            nodeInfo.minVisitIdx = Math.min(nodeInfo.minVisitIdx, neighborInfo.minVisitIdx);
         }
 
         nodeInfo = {
@@ -153,40 +152,41 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
 
     if (!cycles) return [];
 
-    // Resolve true component parent for each node
-    const listNodeAndTrueParent: [Node, Node][] = Array.from(mapNodeInfo.entries())
-        .map(([node, nodeInfo]): [Node, Node] | undefined => {
-            if (nodeInfo.state !== VisitState.VISITED) throw new Error("Unexpected node state, there's a bug");
+    // Map from a given node to its component root
+    const mapComponentRoot: Map<Node, Node> = new Map();
 
-            let curNode = node;
-            let curNodeInfo = nodeInfo;
-            while (curNode !== curNodeInfo.cycleParent) {
-                const newNode = curNodeInfo.cycleParent;
-                const newNodeInfo = mapNodeInfo.get(newNode);
-
-                if (newNodeInfo === undefined || newNodeInfo.state !== VisitState.VISITED) {
-                    throw new Error("Unexpected node state, there's a bug");
-                }
-
-                curNode = newNode;
-                curNodeInfo = newNodeInfo;
-            }
-
-            return [node, curNode];
-        })
-        .filter((v) => v !== undefined);
-
+    // Map of root node to its components, collection of all the cycles keyed by their root
     const mapComponents: Map<Node, Node[]> = new Map();
-    for (const [node, parent] of listNodeAndTrueParent) {
-        const components = mapComponents.get(parent);
+
+    const getComponentRoot = (node: Node, nodeInfo: VisitedInfo): Node => {
+        if (nodeInfo.cycleParent === node) {
+            return node;
+        }
+
+        const cachedRoot = mapComponentRoot.get(node);
+
+        if (cachedRoot !== undefined) return cachedRoot;
+
+        const nextNodeInfo = mapNodeInfo.get(nodeInfo.cycleParent)!;
+
+        if (nextNodeInfo.state !== VisitState.VISITED) throw new Error("Unexpected node state, there's a bug");
+
+        return getComponentRoot(nodeInfo.cycleParent, nextNodeInfo);
+    };
+
+    for (const [node, nodeInfo] of mapNodeInfo.entries()) {
+        if (nodeInfo.state !== VisitState.VISITED) throw new Error("Unexpected node state, there's a bug");
+
+        const componentRoot = getComponentRoot(node, nodeInfo);
+        mapComponentRoot.set(node, componentRoot);
+
+        const components = mapComponents.get(componentRoot);
         if (components === undefined) {
-            mapComponents.set(parent, [node]);
+            mapComponents.set(componentRoot, [node]);
         } else {
             components.push(node);
         }
     }
-
-    const mapNodeToComponentParent = new Map(listNodeAndTrueParent);
 
     // Filtering out components with length == 1, they are either not part of a cycle, or a self-cycle, which we
     // are covering below
@@ -194,8 +194,8 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
 
     const listSelfCycles = Array.from(setSelfCycle.keys())
         .filter((node) => {
-            // Self-cycle, node is not root parent of its component (component length must be > 1)
-            const parent = mapNodeToComponentParent.get(node);
+            // Self-cycle, node is not root of its component (component length must be > 1)
+            const parent = mapComponentRoot.get(node);
             if (parent !== node) return false;
 
             // Self-cycle, node is parent of root, look up component to check if length > 1
@@ -340,7 +340,9 @@ export function makeInjectorFactory<I extends Record<string, any>>() {
                 // By the time we're actually reaching this code, getters for each member are populated,
                 // and (ideally) there are no cycles, so these members will be constructed first and exit.
                 const memberDeps = Object.fromEntries(
-                    memberDepsNames.values().map((depName) => [depName, (finishedInjector as I)[depName]] as const),
+                    Array.from(memberDepsNames.values()).map(
+                        (depName) => [depName, (finishedInjector as I)[depName]] as const,
+                    ),
                 ) as RecordDepsFromDepsList<I, D[keyof I]>;
 
                 // Pass into provider to make member
