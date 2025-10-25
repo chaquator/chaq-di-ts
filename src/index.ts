@@ -11,7 +11,7 @@
 /**
  * Dependencies list: An array of the names of the members in the interface, which a given member depends on.
  */
-type DependenciesList<T> = readonly (keyof T)[];
+type DependenciesList<I> = readonly (keyof I)[];
 
 /**
  * In dependencies record, provide, for each member of the interface, an array of the names of the other members
@@ -28,8 +28,8 @@ type RecordDepsFromDepsList<I, L extends DependenciesList<I>> = {
 };
 
 /**
- * Type which maps names of members in the interface, to a function returning the constructed memebr, given an arguments
- * object containing the member's dependencies
+ * Type which maps names of members in the interface, to a function returning the constructed memeber, given an
+ * arguments object containing the member's dependencies
  */
 export type MemberProviderModule<I, D extends DependenciesListRecord<I>> = {
     [K in keyof I]: (args: RecordDepsFromDepsList<I, D[K]>) => I[K];
@@ -44,7 +44,17 @@ export class CyclicDependencyError extends Error {
         super(message);
         this.name = 'CyclicDependencyError';
 
-        this.cycles = cycles?.map((list) => list.toSorted()).toSorted((a, b) => a.length - b.length);
+        this.cycles = cycles
+            ?.map((list) => list.toSorted())
+            .toSorted((a, b) => {
+                const lenCmp = a.length - b.length;
+
+                // Sort by length first
+                if (lenCmp !== 0) return lenCmp;
+
+                // Then sort "lexicographically"
+                return a.join().localeCompare(b.join());
+            });
 
         Object.setPrototypeOf(this, CyclicDependencyError.prototype);
     }
@@ -354,5 +364,3 @@ export function makeInjectorFactory<I extends Record<string, any>>() {
         return finishedInjector as I;
     };
 }
-
-// TODO: update doc comments
