@@ -69,7 +69,7 @@ export class CyclicDependencyError extends Error {
     }
 }
 
-const getStronglyConnectedComponents = <I>(dependencies: DependenciesListRecord<I>): (keyof I & string)[][] => {
+const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & string)[][] => {
     enum VisitState {
         VISITING,
         VISITED,
@@ -188,9 +188,11 @@ const getStronglyConnectedComponents = <I>(dependencies: DependenciesListRecord<
 
     const mapNodeToComponentParent = new Map(listNodeAndTrueParent);
 
-    const nonSelfCycles: Node[][] = Array.from(mapComponents.values()).filter((list) => list.length > 1);
+    // Filtering out components with length == 1, they are either not part of a cycle, or a self-cycle, which we
+    // are covering below
+    const listNonSelfCycles: Node[][] = Array.from(mapComponents.values()).filter((list) => list.length > 1);
 
-    const selfCycles = Array.from(setSelfCycle.keys())
+    const listSelfCycles = Array.from(setSelfCycle.keys())
         .filter((node) => {
             // Self-cycle, node is not root parent of its component (component length must be > 1)
             const parent = mapNodeToComponentParent.get(node);
@@ -204,9 +206,9 @@ const getStronglyConnectedComponents = <I>(dependencies: DependenciesListRecord<
         })
         .map((node) => [node]);
 
-    const allCyclesSortedByLength = selfCycles.concat(nonSelfCycles);
+    const listCycles = listSelfCycles.concat(listNonSelfCycles);
 
-    return allCyclesSortedByLength;
+    return listCycles;
 };
 
 /**
@@ -301,7 +303,7 @@ export function makeInjectorFactory<I extends Record<string, any>>() {
                 throw new CyclicDependencyError(CyclicDependencyError.STANDARD_MESSAGE);
             }
         } else if (checkCyclesOption === 'detailed') {
-            const cycles = getStronglyConnectedComponents(dependencies);
+            const cycles = getCycles(dependencies);
             if (cycles.length > 0) {
                 throw new CyclicDependencyError(CyclicDependencyError.STANDARD_MESSAGE, cycles);
             }
