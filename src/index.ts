@@ -35,29 +35,49 @@ export type MemberProviderModule<I, D extends DependenciesListRecord<I>> = {
     [K in keyof I]: (args: RecordDepsFromDepsList<I, D[K]>) => I[K];
 };
 
-const completeCycleCheck = <I>(dependencies: DependenciesListRecord<I>) => {
+export class CyclicDependencyError extends Error {
+    static STANDARD_MESSAGE: string = 'At least one cycle found in provided dependencies';
+
+    public readonly cycles: string[][] | undefined;
+
+    constructor(message: string, cycles?: string[][]) {
+        super(message);
+        this.name = 'CyclicDependencyError';
+
+        this.cycles = cycles?.map((list) => list.toSorted()).toSorted((a, b) => a.length - b.length);
+
+        Object.setPrototypeOf(this, CyclicDependencyError.prototype);
+    }
+
+    public toString(): string {
+        if (this.cycles) {
+            return `${this.name}: ${this.message}\nCycles: [\n${this.cycles
+                .map((cycle) => `    [${cycle.join(', ')}]`)
+                .join('\n')}\n]`;
+        }
+        return `${this.name}: ${this.message}`;
+    }
+}
+
+const getStronglyConnectedComponents = <I>(dependencies: DependenciesListRecord<I>): (keyof I & string)[][] => {
     enum VisitState {
         VISITING,
         VISITED,
     }
-
-    type Node = keyof I;
-
+    type Node = keyof I & string;
     type VisitingInfo = {
         state: VisitState.VISITING;
         visitIdx: number;
-        minCycleNeighborIdx: number;
+        minVisitIdx: number;
     };
-
     type VisitedInfo = {
         state: VisitState.VISITED;
-        minCycleNeighborIdx: number;
+        minVisitIdx: number;
         cycleParent: Node;
     };
-
     type NodeInfo = VisitingInfo | VisitedInfo;
 
-    const nodeInfoMap: Map<Node, NodeInfo> = new Map();
+    const mapNodeInfo: Map<Node, NodeInfo> = new Map();
     const visitOrderedList: Node[] = [];
     const setSelfCycle: Set<Node> = new Set();
 
@@ -65,7 +85,6 @@ const completeCycleCheck = <I>(dependencies: DependenciesListRecord<I>) => {
 
     // Pre-condition: key is not yet visited
     const dfsVisit = (key: Node) => {
-        console.info(`visit ${String(key)}`);
         const neighbors = dependencies[key];
 
         // Add to visit list (for key lookup + visit order index)
@@ -76,14 +95,16 @@ const completeCycleCheck = <I>(dependencies: DependenciesListRecord<I>) => {
         let nodeInfo: NodeInfo = {
             state: VisitState.VISITING,
             visitIdx,
-            minCycleNeighborIdx: visitIdx,
+            minVisitIdx: visitIdx,
         };
 
         // Set visit info as our info
-        nodeInfoMap.set(key, nodeInfo);
+        mapNodeInfo.set(key, nodeInfo);
 
         for (const neighbor of neighbors) {
-            console.info(`key ${String(key)} neighbor ${String(neighbor)}`);
+            if (typeof neighbor !== 'string') {
+                continue;
+            }
 
             if (neighbor === key) {
                 setSelfCycle.add(key);
@@ -91,60 +112,91 @@ const completeCycleCheck = <I>(dependencies: DependenciesListRecord<I>) => {
                 continue;
             }
 
-            let neighborInfo = nodeInfoMap.get(neighbor);
+            let neighborInfo = mapNodeInfo.get(neighbor);
             if (neighborInfo === undefined) {
-                // Unvisited, visit...
-                dfsVisit(neighbor);
-                const neighborInfo = nodeInfoMap.get(neighbor)!;
-                console.info(
-                    `key ${String(key)} (${nodeInfo.minCycleNeighborIdx}) after visiting neighbor ${String(neighbor)} (${
-                        neighborInfo.minCycleNeighborIdx
-                    })`,
-                );
-                nodeInfo.minCycleNeighborIdx = Math.min(nodeInfo.minCycleNeighborIdx, neighborInfo.minCycleNeighborIdx);
-                console.info(nodeInfoMap);
+                // Unvisited, visit this neigbor
+                const neighborInfo = dfsVisit(neighbor);
+                nodeInfo.minVisitIdx = Math.min(nodeInfo.minVisitIdx, neighborInfo.minVisitIdx);
             } else if (neighborInfo.state === VisitState.VISITING) {
+                // Neighbor is in the middle of being visited, means there is a cycle
                 cycles = true;
-                console.info(
-                    `key ${String(key)} (${nodeInfo.minCycleNeighborIdx}) visiting neighbor ${String(neighbor)} (${
-                        neighborInfo.minCycleNeighborIdx
-                    })`,
-                );
-                // Visiting, we want to record some stuff here
-                nodeInfo.minCycleNeighborIdx = Math.min(nodeInfo.minCycleNeighborIdx, neighborInfo.minCycleNeighborIdx);
+                nodeInfo.minVisitIdx = Math.min(nodeInfo.minVisitIdx, neighborInfo.minVisitIdx);
             }
         }
 
-        console.info('post edge visit node info', key, nodeInfo);
-
         nodeInfo = {
             state: VisitState.VISITED,
-            minCycleNeighborIdx: nodeInfo.minCycleNeighborIdx,
-            cycleParent: visitOrderedList[nodeInfo.minCycleNeighborIdx]!,
+            minVisitIdx: nodeInfo.minVisitIdx,
+            cycleParent: visitOrderedList[nodeInfo.minVisitIdx]!,
         };
-        nodeInfoMap.set(key, nodeInfo);
+        mapNodeInfo.set(key, nodeInfo);
 
-        console.info('node info', key, nodeInfo);
-        console.info(`exit visit ${String(key)}`);
+        return nodeInfo;
     };
 
     for (const node in dependencies) {
-        console.info(`chaq ${node}`);
-        const nodeInfo = nodeInfoMap.get(node);
+        const nodeInfo = mapNodeInfo.get(node);
         if (nodeInfo === undefined) {
             dfsVisit(node);
         }
     }
 
-    console.info('final', nodeInfoMap);
+    if (!cycles) return [];
 
-    if (!cycles) return;
+    // Resolve true component parent for each node
+    const listNodeAndTrueParent: [Node, Node][] = Array.from(mapNodeInfo.entries())
+        .map(([node, nodeInfo]): [Node, Node] | undefined => {
+            if (nodeInfo.state !== VisitState.VISITED) throw new Error("Unexpected node state, there's a bug");
 
-    // TODO: routine:
-    // - resolve parents (have to dive until for a node it is its own parent)
-    // - print self cycles
-    // - collect cycles by parent
-    // - print in ascending order by size
+            let curNode = node;
+            let curNodeInfo = nodeInfo;
+            while (curNode !== curNodeInfo.cycleParent) {
+                const newNode = curNodeInfo.cycleParent;
+                const newNodeInfo = mapNodeInfo.get(newNode);
+
+                if (newNodeInfo === undefined || newNodeInfo.state !== VisitState.VISITED) {
+                    throw new Error("Unexpected node state, there's a bug");
+                }
+
+                curNode = newNode;
+                curNodeInfo = newNodeInfo;
+            }
+
+            return [node, curNode];
+        })
+        .filter((v) => v !== undefined);
+
+    const mapComponents: Map<Node, Node[]> = new Map();
+    for (const [node, parent] of listNodeAndTrueParent) {
+        const components = mapComponents.get(parent);
+        if (components === undefined) {
+            mapComponents.set(parent, [node]);
+        } else {
+            components.push(node);
+        }
+    }
+
+    const mapNodeToComponentParent = new Map(listNodeAndTrueParent);
+
+    const nonSelfCycles: Node[][] = Array.from(mapComponents.values()).filter((list) => list.length > 1);
+
+    const selfCycles = Array.from(setSelfCycle.keys())
+        .filter((node) => {
+            // Self-cycle, node is not root parent of its component (component length must be > 1)
+            const parent = mapNodeToComponentParent.get(node);
+            if (parent !== node) return false;
+
+            // Self-cycle, node is parent of root, look up component to check if length > 1
+            const component = mapComponents.get(node);
+            if (component !== undefined && component.length > 1) return false;
+
+            return true;
+        })
+        .map((node) => [node]);
+
+    const allCyclesSortedByLength = selfCycles.concat(nonSelfCycles);
+
+    return allCyclesSortedByLength;
 };
 
 /**
@@ -173,9 +225,9 @@ const anyCycilcDependencies = <I>(dependencies: DependenciesListRecord<I>): bool
 
                 const neighborVisitState = visitaitonMap.get(neighbor);
 
-                if (neighborVisitState !== undefined && neighborVisitState === VisitState.VISITNG) {
+                if (neighborVisitState === VisitState.VISITNG) {
                     return true;
-                } else if (dfsVisit(neighbor)) {
+                } else if (neighborVisitState === undefined && dfsVisit(neighbor)) {
                     return true;
                 }
             }
@@ -198,9 +250,15 @@ const anyCycilcDependencies = <I>(dependencies: DependenciesListRecord<I>): bool
 export interface DependencyInjectionOptions {
     /**
      * Check dependencies for cycles on creation of injector. Can be disabled in case of performance concerns.
-     * @default true
+     *
+     * Provide `'simple'` to immediately throw if at least one cycle is found, and you don't want to gather the list of
+     * cycles. Provide `'detailed'` to gather the list of all cycles found in the graph, organized into
+     * strongly-connected components. Provide `undefined` to skip cycle check entirely, at the risk of potentially going
+     * into an infinite loop at runtime if a cycle is present in the dependency graph.
+     *
+     * @default 'simple'
      */
-    checkForCycles?: boolean;
+    checkForCycles?: 'skip' | 'simple' | 'detailed';
 
     /**
      * Logging callback for listening in on injector usage.
@@ -227,12 +285,16 @@ export function makeInjectorFactory<I extends Record<string, any>>() {
         options?: DependencyInjectionOptions,
     ): I => {
         // First check for any cycles
-        if (options?.checkForCycles ?? true) {
-            // if (anyCycilcDependencies(dependencies)) {
-            //     throw new Error('Dependency graph has cycle');
-            // }
-            completeCycleCheck(dependencies);
-            throw new Error('Dependency graph has cycle');
+        const checkCyclesOption = options?.checkForCycles ?? 'simple';
+        if (checkCyclesOption === 'simple') {
+            if (anyCycilcDependencies(dependencies)) {
+                throw new CyclicDependencyError(CyclicDependencyError.STANDARD_MESSAGE);
+            }
+        } else if (checkCyclesOption === 'detailed') {
+            const cycles = getStronglyConnectedComponents(dependencies);
+            if (cycles.length > 0) {
+                throw new CyclicDependencyError(CyclicDependencyError.STANDARD_MESSAGE, cycles);
+            }
         }
 
         // Initialize map of member name to created member objects

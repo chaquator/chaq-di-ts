@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { makeInjectorFactory, type DependenciesListRecord, type MemberProviderModule } from '../src/index.js';
+import {
+    CyclicDependencyError,
+    makeInjectorFactory,
+    type DependenciesListRecord,
+    type DependencyInjectionOptions,
+    type MemberProviderModule,
+} from '../src/index.js';
 
 // Utility function for asserting on logs
 const increment = (map: Map<string, number>, ...keys: string[]) => {
@@ -23,8 +29,6 @@ test('Pythagorean triple', async (t) => {
 
         digest: string;
     }
-
-    const makePythagoreanTripleModule = makeInjectorFactory<PythagoreanTriple>();
 
     const mapExpectedLogs = new Map([
         ['digest - get', 1],
@@ -49,7 +53,7 @@ test('Pythagorean triple', async (t) => {
     const mapActualLogs: Map<string, number> = new Map();
     const log = (statement: string) => increment(mapActualLogs, statement);
 
-    const PythagoreanTripleModule = makePythagoreanTripleModule(
+    const PythagoreanTripleModule = makeInjectorFactory<PythagoreanTriple>()(
         {
             a: [],
             b: [],
@@ -88,104 +92,153 @@ test('Pythagorean triple', async (t) => {
     });
 });
 
-test('Cycles', { only: true }, async (t) => {
-    t.runOnly(true);
+test('Cycles', async (t) => {
     /**
-     * Tests demonstrating functionality to catch cycles. Currently, the moment when a cycle is caught, an exception
-     * is thrown, without further exploring the dependency graph for any other cycles.
+     * Tests demonstrating functionality to catch cycles.
      */
-
-    interface ABCs {
-        a: number;
-        b: number;
-        c: number;
-    }
-
-    interface ABCDEFGH {
-        a: number;
-        b: number;
-        c: number;
-        d: number;
-        e: number;
-        f: number;
-        g: number;
-        h: number;
-    }
 
     const UNUSED = {} as any;
 
-    const makeABCs = makeInjectorFactory<ABCs>();
-    const makeABCDEFGH = makeInjectorFactory<ABCDEFGH>();
+    const cycleCheckStyle: DependencyInjectionOptions['checkForCycles'][] = ['simple', 'detailed'];
 
-    await t.test('Self loop', () =>
-        assert.throws(() =>
-            makeABCs(
-                {
-                    a: ['a'],
-                    b: ['b'],
-                    c: ['c'],
-                },
-                UNUSED,
-            ),
-        ),
-    );
+    const validateCycleError = (
+        err: unknown,
+        style: DependencyInjectionOptions['checkForCycles'],
+        expectedCycles: string[][],
+    ) => {
+        assert(err instanceof CyclicDependencyError);
 
-    await t.test('2-way loop', () =>
-        assert.throws(() =>
-            makeABCs(
-                {
-                    a: ['b'],
-                    b: ['a'],
-                    c: [],
-                },
-                UNUSED,
-            ),
-        ),
-    );
+        if (style === 'detailed') {
+            assert(err.cycles !== undefined);
 
-    await t.test('3-way loop', () =>
-        assert.throws(() =>
-            makeABCs(
-                {
-                    a: ['b'],
-                    b: ['c'],
-                    c: ['a'],
-                },
-                UNUSED,
-            ),
-        ),
-    );
+            const setActualCycles = new Set(err.cycles.map((cycle) => new Set(cycle)));
+            const setExpectedCycles = new Set(expectedCycles.map((cycle) => new Set(cycle)));
 
-    await t.test('SCC', { only: false }, () =>
-        assert.throws(() =>
-            makeABCDEFGH(
-                {
-                    a: ['b'],
-                    b: ['c', 'e', 'f'],
-                    c: ['d', 'g'],
-                    d: ['c', 'h'],
-                    e: ['a', 'f'],
-                    f: ['g'],
-                    g: ['f'],
-                    h: ['d', 'g', 'h'],
-                },
-                UNUSED,
-            ),
-        ),
-    );
+            assert.deepStrictEqual(
+                setActualCycles,
+                setExpectedCycles,
+                'Expected cycles content to match expected, ignoring order',
+            );
 
-    await t.test('SCC 2', { only: true }, () =>
-        assert.throws(() =>
-            makeABCs(
-                {
-                    a: ['b'],
-                    b: ['c', 'a'],
-                    c: ['b'],
-                },
-                UNUSED,
+            assert.deepStrictEqual(
+                err.toString(),
+                new CyclicDependencyError(CyclicDependencyError.STANDARD_MESSAGE, expectedCycles).toString(),
+                'Expected string represntation of cycle to match expected',
+            );
+        } else {
+            assert(err.cycles === undefined);
+        }
+
+        return true;
+    };
+
+    for (const style of cycleCheckStyle) {
+        await t.test(`Self loop - ${style}`, () =>
+            assert.throws(
+                () =>
+                    makeInjectorFactory<{ a: number }>()(
+                        {
+                            a: ['a'],
+                        },
+                        UNUSED,
+                        {
+                            checkForCycles: style,
+                        },
+                    ),
+                (err) => validateCycleError(err, style, [['a']]),
             ),
-        ),
-    );
+        );
+
+        await t.test(`2-way loop - ${style}`, () =>
+            assert.throws(
+                () =>
+                    makeInjectorFactory<{ a: number; b: number }>()(
+                        {
+                            a: ['b'],
+                            b: ['a'],
+                        },
+                        UNUSED,
+                        {
+                            checkForCycles: style,
+                        },
+                    ),
+                (err) => validateCycleError(err, style, [['a', 'b']]),
+            ),
+        );
+
+        await t.test(`3-way loop - ${style}`, () =>
+            assert.throws(
+                () =>
+                    makeInjectorFactory<{ a: number; b: number; c: number }>()(
+                        {
+                            a: ['b'],
+                            b: ['c'],
+                            c: ['a'],
+                        },
+                        UNUSED,
+                        {
+                            checkForCycles: style,
+                        },
+                    ),
+                (err) => validateCycleError(err, style, [['a', 'b', 'c']]),
+            ),
+        );
+
+        await t.test(`SCC - ${style}`, () =>
+            assert.throws(
+                () =>
+                    makeInjectorFactory<{
+                        a: number;
+                        b: number;
+                        c: number;
+                        d: number;
+                        e: number;
+                        f: number;
+                        g: number;
+                        h: number;
+                    }>()(
+                        {
+                            a: ['b'],
+                            b: ['c', 'e', 'f'],
+                            c: ['d', 'g'],
+                            d: ['c', 'h'],
+                            e: ['a', 'f'],
+                            f: ['g'],
+                            g: ['f'],
+                            h: ['d', 'g', 'h'],
+                        },
+                        UNUSED,
+                        {
+                            checkForCycles: style,
+                        },
+                    ),
+                (err) =>
+                    validateCycleError(err, style, [
+                        ['a', 'b', 'e'],
+                        ['f', 'g'],
+                        ['c', 'd', 'h'],
+                    ]),
+            ),
+        );
+
+        await t.test(`SCC 2 - ${style}`, () =>
+            assert.throws(
+                () =>
+                    makeInjectorFactory<{ a: number; b: number; c: number }>()(
+                        {
+                            a: ['b'],
+                            b: ['c', 'a'],
+                            c: ['b'],
+                        },
+                        UNUSED,
+                        {
+                            checkForCycles: style,
+                        },
+                    ),
+                (err) => validateCycleError(err, style, [['a', 'b', 'c']]),
+            ),
+        );
+    }
 });
 
 test('Split usage', async (t) => {
