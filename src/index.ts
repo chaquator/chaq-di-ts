@@ -83,7 +83,7 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
     type VisitedInfo = {
         state: VisitState.VISITED;
         minVisitIdx: number;
-        cycleParent: Node;
+        componentParent: Node;
     };
     type NodeInfo = VisitingInfo | VisitedInfo;
 
@@ -126,17 +126,18 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
             if (neighborInfo === undefined) {
                 // Unvisited, visit this neigbor
                 neighborInfo = dfsVisit(neighbor);
+                nodeInfo.minVisitIdx = Math.min(nodeInfo.minVisitIdx, neighborInfo.minVisitIdx);
             } else if (neighborInfo.state === VisitState.VISITING) {
                 // Neighbor is in the middle of being visited, means there is a cycle
                 cycles = true;
+                nodeInfo.minVisitIdx = Math.min(nodeInfo.minVisitIdx, neighborInfo.minVisitIdx);
             }
-            nodeInfo.minVisitIdx = Math.min(nodeInfo.minVisitIdx, neighborInfo.minVisitIdx);
         }
 
         nodeInfo = {
             state: VisitState.VISITED,
             minVisitIdx: nodeInfo.minVisitIdx,
-            cycleParent: visitOrderedList[nodeInfo.minVisitIdx]!,
+            componentParent: visitOrderedList[nodeInfo.minVisitIdx]!,
         };
         mapNodeInfo.set(key, nodeInfo);
 
@@ -152,6 +153,9 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
 
     if (!cycles) return [];
 
+    // Manually cast type, since we visited every node above
+    const mapVisitedNodeInfo = mapNodeInfo as Map<Node, VisitedInfo>;
+
     // Map from a given node to its component root
     const mapComponentRoot: Map<Node, Node> = new Map();
 
@@ -159,7 +163,7 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
     const mapComponents: Map<Node, Node[]> = new Map();
 
     const getComponentRoot = (node: Node, nodeInfo: VisitedInfo): Node => {
-        if (nodeInfo.cycleParent === node) {
+        if (nodeInfo.componentParent === node) {
             return node;
         }
 
@@ -167,16 +171,12 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
 
         if (cachedRoot !== undefined) return cachedRoot;
 
-        const nextNodeInfo = mapNodeInfo.get(nodeInfo.cycleParent)!;
+        const nextNodeInfo = mapVisitedNodeInfo.get(nodeInfo.componentParent)!;
 
-        if (nextNodeInfo.state !== VisitState.VISITED) throw new Error("Unexpected node state, there's a bug");
-
-        return getComponentRoot(nodeInfo.cycleParent, nextNodeInfo);
+        return getComponentRoot(nodeInfo.componentParent, nextNodeInfo);
     };
 
-    for (const [node, nodeInfo] of mapNodeInfo.entries()) {
-        if (nodeInfo.state !== VisitState.VISITED) throw new Error("Unexpected node state, there's a bug");
-
+    for (const [node, nodeInfo] of mapVisitedNodeInfo.entries()) {
         const componentRoot = getComponentRoot(node, nodeInfo);
         mapComponentRoot.set(node, componentRoot);
 
