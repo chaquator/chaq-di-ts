@@ -1,14 +1,4 @@
 /**
- * DI Terminology
- * - Interface - Collection of members that have some dependency on each other in order to be constructed
- * - Members - Individual object in a interface, has a name and a type
- * - Dependencies - For a given member, a list of other members which need to be constructed first, as this member
- *     requires them during its creation
- * - Module - Instructions describing how to construct each member given its dependencies
- * - Injector - Finished implementation of interface which constructs members based on the provided module
- */
-
-/**
  * Dependencies list: An array of the names of the members in the interface, which a given member depends on.
  */
 type DependenciesList<I> = readonly (keyof I)[];
@@ -61,7 +51,7 @@ export class CyclicDependencyError extends Error {
 
     public toString(): string {
         if (this.cycles) {
-            return `${this.name}: ${this.message}\nCycles: [\n${this.cycles
+            return `${this.name}: ${this.message}\n\nCycles: [\n${this.cycles
                 .map((cycle) => `    [${cycle.join(', ')}]`)
                 .join('\n')}\n]`;
         }
