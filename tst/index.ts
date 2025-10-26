@@ -238,6 +238,24 @@ test('Cycles', async (t) => {
                 (err) => validateCycleError(err, style, [['a', 'b', 'c']]),
             ),
         );
+
+        await t.test(`SCC 3 - ${style}`, () =>
+            assert.throws(
+                () =>
+                    makeInjectorFactory<{ a: number; b: number; c: number }>()(
+                        {
+                            a: ['b'],
+                            b: ['a'],
+                            c: ['b'],
+                        },
+                        UNUSED,
+                        {
+                            checkForCycles: style,
+                        },
+                    ),
+                (err) => validateCycleError(err, style, [['a', 'b']]),
+            ),
+        );
     }
 });
 
