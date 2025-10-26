@@ -11,7 +11,7 @@ Relatively lightweight dependency injection tool
 
 ### Terminology
 
--   Interface - Collection of objects, deonated by a unique name and a type, that have some dependency on each other
+-   Interface - Collection of objects, denoted by a unique name and a type, that have some dependency on each other
     in order to be constructed
 -   Members - Individual object in a interface, has a unique name and a type
 -   Dependencies - For a given member, a list of other members which need to be constructed first, as this member
@@ -32,10 +32,16 @@ interface PythagoreanTriple {
 }
 
 // Create injector "factory"
-// This pattern is due to TypeScript not allowing partial type arguments, with the rest being deduced
 const makePythagoreanTripleInjector = makeInjectorFactory<PythagoreanTriple>();
 
-// Create an injector by specifying dependencies and then the module based on dependencies
+// ^ This pattern is due to TypeScript not allowing only some type arguments being specified,
+// with the rest being deduced
+// So you call `makeInjectorFactory<T>` and get back the function to create the injector
+// This returned function accepts generic arguments based on `T`, which allows auto-complete to work
+// for the dependencies, and subsequently it allows auto-complete to for the module,
+// which is based on the dependencies
+
+// Create an injector by specifying dependencies, and then the module based on dependencies
 const PythagoreanTripleInjector = makePythagoreanTripleInjector(
     {
         a: [],
