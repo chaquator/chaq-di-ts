@@ -33,6 +33,7 @@ export class CyclicDependencyError extends Error {
     constructor(message: string, cycles?: string[][]) {
         super(message);
         this.name = 'CyclicDependencyError';
+        Object.setPrototypeOf(this, CyclicDependencyError.prototype);
 
         this.cycles = cycles
             ?.map((list) => Array.from(list).sort())
@@ -42,11 +43,19 @@ export class CyclicDependencyError extends Error {
                 // Sort by length first
                 if (lenCmp !== 0) return lenCmp;
 
-                // Then sort "lexicographically"
-                return a.join().localeCompare(b.join());
-            });
+                // Then sort element by element
+                for (let i = 0; i < a.length; ++i) {
+                    const elemA = a[i];
+                    const elemB = b[i];
+                    if (elemA === undefined || elemB === undefined) continue;
 
-        Object.setPrototypeOf(this, CyclicDependencyError.prototype);
+                    const cmp = elemA.localeCompare(elemB);
+
+                    if (cmp !== 0) return cmp;
+                }
+
+                return 0;
+            });
     }
 
     public toString(): string {
@@ -60,21 +69,24 @@ export class CyclicDependencyError extends Error {
 }
 
 const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & string)[][] => {
-    enum VisitState {
-        VISITING,
-        VISITED,
-    }
+    const VisitState = {
+        VISITING: 0,
+        VISITED: 1,
+    } as const;
+
     type Node = keyof I & string;
+
     type VisitingInfo = {
-        state: VisitState.VISITING;
+        state: typeof VisitState.VISITING;
         visitIdx: number;
         minVisitIdx: number;
     };
     type VisitedInfo = {
-        state: VisitState.VISITED;
+        state: typeof VisitState.VISITED;
         minVisitIdx: number;
         componentParent: Node;
     };
+
     type NodeInfo = VisitingInfo | VisitedInfo;
 
     const mapNodeInfo: Map<Node, NodeInfo> = new Map();
@@ -153,23 +165,33 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
     const mapComponents: Map<Node, Node[]> = new Map();
 
     const getComponentRoot = (node: Node, nodeInfo: VisitedInfo): Node => {
+        // Try get from map first
+        let componentRoot = mapComponentRoot.get(node);
+        if (componentRoot !== undefined) return componentRoot;
+
+        // Otherwise, find the answer. This will populate the map for all other parents along the way
         if (nodeInfo.componentParent === node) {
-            return node;
+            // Base case - node's component parent is itself
+            componentRoot = node;
+        } else {
+            // Check component root of parent (recursive call will also populate map, saving effort for future calls)
+            const nextNodeInfo = mapVisitedNodeInfo.get(nodeInfo.componentParent)!;
+            componentRoot = getComponentRoot(nodeInfo.componentParent, nextNodeInfo);
         }
 
-        const cachedRoot = mapComponentRoot.get(node);
+        mapComponentRoot.set(node, componentRoot);
 
-        if (cachedRoot !== undefined) return cachedRoot;
-
-        const nextNodeInfo = mapVisitedNodeInfo.get(nodeInfo.componentParent)!;
-
-        return getComponentRoot(nodeInfo.componentParent, nextNodeInfo);
+        return componentRoot;
     };
 
     for (const [node, nodeInfo] of mapVisitedNodeInfo.entries()) {
-        const componentRoot = getComponentRoot(node, nodeInfo);
-        mapComponentRoot.set(node, componentRoot);
+        let componentRoot = mapComponentRoot.get(node);
+        if (componentRoot === undefined) {
+            // Sets map entry during call
+            componentRoot = getComponentRoot(node, nodeInfo);
+        }
 
+        // Add given node to list of components for the component root
         const components = mapComponents.get(componentRoot);
         if (components === undefined) {
             mapComponents.set(componentRoot, [node]);
@@ -208,18 +230,18 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
  * @returns `true` if dependencies has any cycles. `false` otherwise
  */
 const anyCycilcDependencies = <I>(dependencies: DependenciesListRecord<I>): boolean => {
-    enum VisitState {
-        VISITNG,
-        VISITED,
-    }
+    const VisitState = {
+        VISITING: 0,
+        VISITED: 1,
+    } as const;
 
-    const visitaitonMap: Map<keyof I, VisitState> = new Map();
+    const visitaitonMap: Map<keyof I, (typeof VisitState)[keyof typeof VisitState]> = new Map();
 
     const dfsVisit = (key: keyof I): boolean => {
         const neighbors = dependencies[key];
 
         if (neighbors.length > 0) {
-            visitaitonMap.set(key, VisitState.VISITNG);
+            visitaitonMap.set(key, VisitState.VISITING);
             for (const neighbor of neighbors) {
                 if (neighbor == key) {
                     return true;
@@ -227,7 +249,7 @@ const anyCycilcDependencies = <I>(dependencies: DependenciesListRecord<I>): bool
 
                 const neighborVisitState = visitaitonMap.get(neighbor);
 
-                if (neighborVisitState === VisitState.VISITNG) {
+                if (neighborVisitState === VisitState.VISITING) {
                     return true;
                 } else if (neighborVisitState === undefined && dfsVisit(neighbor)) {
                     return true;

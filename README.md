@@ -2,6 +2,8 @@
 
 Relatively lightweight dependency injection tool
 
+![Demo showing functionality and auto-complete](demo.gif)
+
 ## Requirements
 
 -   TypeScript ^5.9.3
@@ -23,7 +25,7 @@ Relatively lightweight dependency injection tool
 
 ```TypeScript
 // Specify an interface
-interface PythagoreanTriple {
+interface RightTriangle {
     a: number;
     b: number;
     c: number;
@@ -32,7 +34,7 @@ interface PythagoreanTriple {
 }
 
 // Create injector "factory"
-const makePythagoreanTripleInjector = makeInjectorFactory<PythagoreanTriple>();
+const makeRightTriangleInjector = makeInjectorFactory<RightTriangle>();
 
 // ^ This pattern is due to TypeScript not allowing only some type arguments being specified,
 // with the rest being deduced
@@ -42,7 +44,7 @@ const makePythagoreanTripleInjector = makeInjectorFactory<PythagoreanTriple>();
 // which is based on the dependencies
 
 // Create an injector by specifying dependencies, and then the module based on dependencies
-const PythagoreanTripleInjector = makePythagoreanTripleInjector(
+const RightTriangleInjector = makeRightTriangleInjector(
     {
         a: [],
         b: [],
@@ -58,7 +60,7 @@ const PythagoreanTripleInjector = makePythagoreanTripleInjector(
 );
 
 // Get member from newly created injector, all of its dependencies will be lazily constructed too
-console.log(PythagoreanTripleInjector.digest);
+console.log(RightTriangleInjector.digest);
 
 // Log output:
 // 3^2 + 4^2 = 5^2
@@ -156,10 +158,10 @@ try {
 
 ### Logging
 
-Using PythagoreanTriple example from earlier:
+Using RightTriangle example from earlier:
 
 ```TypeScript
-const PythagoreanTripleInjector = makePythagoreanTripleInjector(
+const RightTriangleInjector = makeRightTriangleInjector(
     {
         a: [],
         b: [],
@@ -174,28 +176,28 @@ const PythagoreanTripleInjector = makePythagoreanTripleInjector(
     },
     {
         log: (statement) =>
-            console.log(`[PythagoreanTriple] ${statement}`),
+            console.log(`[RightTriangle] ${statement}`),
     },
 );
 
-console.log(PythagoreanTripleInjector.digest);
+console.log(RightTriangleInjector.digest);
 
 // Log output:
-// [PythagoreanTriple] digest - get
-// [PythagoreanTriple] digest - constructing
-// [PythagoreanTriple] a - get
-// [PythagoreanTriple] a - constructing
-// [PythagoreanTriple] a - constructed
-// [PythagoreanTriple] b - get
-// [PythagoreanTriple] b - constructing
-// [PythagoreanTriple] b - constructed
-// [PythagoreanTriple] c - get
-// [PythagoreanTriple] c - constructing
-// [PythagoreanTriple] a - get
-// [PythagoreanTriple] a - already constructed
-// [PythagoreanTriple] b - get
-// [PythagoreanTriple] b - already constructed
-// [PythagoreanTriple] c - constructed
-// [PythagoreanTriple] digest - constructed
+// [RightTriangle] digest - get
+// [RightTriangle] digest - constructing
+// [RightTriangle] a - get
+// [RightTriangle] a - constructing
+// [RightTriangle] a - constructed
+// [RightTriangle] b - get
+// [RightTriangle] b - constructing
+// [RightTriangle] b - constructed
+// [RightTriangle] c - get
+// [RightTriangle] c - constructing
+// [RightTriangle] a - get
+// [RightTriangle] a - already constructed
+// [RightTriangle] b - get
+// [RightTriangle] b - already constructed
+// [RightTriangle] c - constructed
+// [RightTriangle] digest - constructed
 // 3^2 + 4^2 = 5^2
 ```

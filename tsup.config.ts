@@ -1,0 +1,12 @@
+import { defineConfig } from 'tsup';
+
+export default defineConfig({
+    entry: ['src/index.ts'],
+    target: 'es2020',
+    format: ['cjs', 'esm'], // Build for commonJS and ESmodules
+    dts: true, // Generate declaration file (.d.ts)
+    tsconfig: './tsconfig.release.json',
+    splitting: false,
+    sourcemap: true,
+    clean: true,
+});

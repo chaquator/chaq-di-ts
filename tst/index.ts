@@ -21,8 +21,8 @@ const increment = (map: Map<string, number>, ...keys: string[]) => {
     }
 };
 
-test('Pythagorean triple', async (t) => {
-    interface PythagoreanTriple {
+test('Logging and basic usage', async (t) => {
+    interface RightTriangle {
         a: number;
         b: number;
         c: number;
@@ -53,7 +53,7 @@ test('Pythagorean triple', async (t) => {
     const mapActualLogs: Map<string, number> = new Map();
     const log = (statement: string) => increment(mapActualLogs, statement);
 
-    const PythagoreanTripleInjector = makeInjectorFactory<PythagoreanTriple>()(
+    const RightTriangleInjector = makeInjectorFactory<RightTriangle>()(
         {
             a: [],
             b: [],
@@ -73,7 +73,7 @@ test('Pythagorean triple', async (t) => {
 
     await t.test('Initial', () => {
         // Assert contents are as expected
-        assert.deepStrictEqual(PythagoreanTripleInjector.digest, '3^2 + 4^2 = 5^2');
+        assert.deepStrictEqual(RightTriangleInjector.digest, '3^2 + 4^2 = 5^2');
 
         // Assert correct logs are emitted
         assert.deepStrictEqual(mapActualLogs, mapExpectedLogs);
@@ -82,7 +82,7 @@ test('Pythagorean triple', async (t) => {
     // Retrieve digest again, and assert on updated logs
     await t.test('Additional retrieval of digest', () => {
         // Re-retrieve
-        assert.deepStrictEqual(PythagoreanTripleInjector.digest, '3^2 + 4^2 = 5^2');
+        assert.deepStrictEqual(RightTriangleInjector.digest, '3^2 + 4^2 = 5^2');
 
         // Increment logs based on retrieval
         increment(mapExpectedLogs, 'digest - get', 'digest - already constructed');

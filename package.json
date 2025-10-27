@@ -13,11 +13,13 @@
     "license": "MIT",
     "author": "chaquator",
     "type": "module",
-    "main": "./lib/src/index.js",
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
     "scripts": {
-        "build": "tsc",
+        "build": "tsup",
         "clean": "rm -rf lib",
-        "test": "npm run build && node --import=tsx --test ./tst/*.ts"
+        "test": "tsc && node --import=tsx --test ./tst/*.ts"
     },
     "devDependencies": {
         "@types/node": "^24.6.2",
