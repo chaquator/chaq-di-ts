@@ -171,7 +171,7 @@ const RightTriangleInjector = makeRightTriangleInjector(
     {
         a: () => 3,
         b: () => 4,
-        c: ({ a, b }) => Math.round(Math.sqrt(a * a + b * b) * 100) / 100,
+        c: ({ a, b }) => Math.sqrt(a * a + b * b),
         digest: ({ a, b, c }) => `${a}^2 + ${b}^2 = ${c}^2`,
     },
     {
