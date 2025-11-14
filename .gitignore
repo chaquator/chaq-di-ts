@@ -140,3 +140,5 @@ vite.config.ts.timestamp-*
 
 # TypeScript build
 lib/
+
+.DS_Store

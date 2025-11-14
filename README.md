@@ -7,7 +7,7 @@ Relatively lightweight dependency injection tool
 ## Requirements
 
 -   TypeScript ^5.9.3
--   ES2019 or later
+-   ES2020 or later
 
 ## Usage
 
@@ -36,12 +36,12 @@ interface RightTriangle {
 // Create injector "factory"
 const makeRightTriangleInjector = makeInjectorFactory<RightTriangle>();
 
-// ^ This pattern is due to TypeScript not allowing only some type arguments being specified,
-// with the rest being deduced
+// ^ This pattern is due to TypeScript requiring either all or no types to be passed into a template, there
+// is no partial deduction.
 // So you call `makeInjectorFactory<T>` and get back the function to create the injector
 // This returned function accepts generic arguments based on `T`, which allows auto-complete to work
-// for the dependencies, and subsequently it allows auto-complete to for the module,
-// which is based on the dependencies
+// for the dependencies, and subsequently it allows auto-complete to work for the module,
+// based on the dependencies.
 
 // Create an injector by specifying dependencies, and then the module based on dependencies
 const RightTriangleInjector = makeRightTriangleInjector(
@@ -59,7 +59,7 @@ const RightTriangleInjector = makeRightTriangleInjector(
     },
 );
 
-// Get member from newly created injector, all of its dependencies will be lazily constructed too
+// Get member from newly created injector, all of its dependencies will be lazily constructed
 console.log(RightTriangleInjector.digest);
 
 // Log output:
