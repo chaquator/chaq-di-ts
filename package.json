@@ -1,6 +1,6 @@
 {
     "name": "chaq-di-ts",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "description": "relatively lightweight dependency injection tool",
     "homepage": "https://github.com/chaquator/chaq-di-ts#readme",
     "bugs": {

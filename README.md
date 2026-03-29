@@ -116,8 +116,6 @@ interface ABCs {
     c: number;
     d: number;
     e: number;
-    f: number;
-    g: number;
 }
 
 try {
@@ -196,6 +194,52 @@ console.log(RightTriangleInjector.digest);
 // [RightTriangle] c - constructed
 // [RightTriangle] digest - constructed
 // 3^2 + 4^2 = 5^2
+```
+
+### Using types ahead of making the injector
+
+You can use `DependenciesListRecord<I>` and `MemberProviderModule<I, D>` to model the dependencies and module without
+needing to call `makeInjectorFactory<I>`. However, for the dependencies to provide the right auto-complete in the
+module, it's necessary to let the dependencies object type be as precise as possible, so you should use the `satisfies`
+keyword to enforce autocomplete, and verify the type fits.
+
+```TypeScript
+/**
+ * Test showing declaration of the interface, the dependencies, and finally the module separately, instead of all
+ * inline.
+ *
+ * DependenciesListRecord<T> lets you define dependencies for an interface T. MemberProviderModule<T, D> takes an
+ * interface T, and a dependencies list record D, which is a dependencies list record of T.
+ *
+ * Then to make the injector, you pass the interface T as a template type to `makeInjectorFactory`, and then pass
+ * the dependencies and corresponding module into the returned factory function.
+ */
+
+interface FooBar {
+    foo: string;
+    bar: string;
+
+    combined: string;
+}
+
+const fooBarDependencies = {
+    foo: [],
+    bar: [],
+    combined: ['foo', 'bar'],
+} satisfies DependenciesListRecord<FooBar>;
+
+const fooBraModule: MemberProviderModule<FooBar, typeof fooBarDependencies> = {
+    foo: () => 'foo',
+    bar: () => 'bar',
+    combined: ({ foo, bar }) => `${foo}${bar}`,
+};
+
+const FooBarInjector = makeInjectorFactory<FooBar>()(fooBarDependencies, fooBraModule);
+
+console.log(FooBaerInjector.combined);
+
+// Log output:
+// foobar
 ```
 
 ## Changelogs

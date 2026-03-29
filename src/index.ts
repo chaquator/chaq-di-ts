@@ -180,18 +180,14 @@ const getCycles = <I extends Record<string, any>>(dependencies: DependenciesList
     };
 
     for (const [node, nodeInfo] of mapVisitedNodeInfo.entries()) {
-        let componentRoot = mapComponentRoot.get(node);
-        if (componentRoot === undefined) {
-            // Sets map entry during call
-            componentRoot = getComponentRoot(node, nodeInfo);
-        }
+        const componentRootForNode = getComponentRoot(node, nodeInfo);
 
         // Add given node to list of components for the component root
-        const components = mapComponents.get(componentRoot);
-        if (components === undefined) {
-            mapComponents.set(componentRoot, [node.toString()]);
+        const component = mapComponents.get(componentRootForNode);
+        if (component) {
+            component.push(node.toString());
         } else {
-            components.push(node.toString());
+            mapComponents.set(componentRootForNode, [node.toString()]);
         }
     }
 
