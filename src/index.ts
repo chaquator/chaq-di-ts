@@ -7,7 +7,9 @@ type DependenciesList<I> = readonly (keyof I)[];
  * In dependencies record, provide, for each member of the interface, an array of the names of the other members
  * in the interface which the current member depends on.
  */
-export type DependenciesListRecord<I> = Record<keyof I, DependenciesList<I>>;
+export type DependenciesListRecord<I> = {
+    [K in keyof I]: readonly Exclude<keyof I, K>[];
+};
 
 /**
  * Maps the list/tuple of member names in a dependencies list to a record mapping the member name to the corresponding
@@ -68,13 +70,13 @@ export class CyclicDependencyError extends Error {
     }
 }
 
-const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & string)[][] => {
+const getCycles = <I extends Record<string, any>>(dependencies: DependenciesListRecord<I>): string[][] => {
     const VisitState = {
         VISITING: 0,
         VISITED: 1,
     } as const;
 
-    type Node = keyof I & string;
+    type Node = keyof I;
 
     type VisitingInfo = {
         state: typeof VisitState.VISITING;
@@ -91,12 +93,11 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
 
     const mapNodeInfo: Map<Node, NodeInfo> = new Map();
     const visitOrderedList: Node[] = [];
-    const setSelfCycle: Set<Node> = new Set();
 
     let cycles = false;
 
     // Pre-condition: key is not yet visited
-    const dfsVisit = (key: Node) => {
+    const dfsVisit = <K extends keyof I>(key: K) => {
         const neighbors = dependencies[key];
 
         // Add to visit list (for key lookup + visit order index)
@@ -115,12 +116,6 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
 
         for (const neighbor of neighbors) {
             if (typeof neighbor !== 'string') {
-                continue;
-            }
-
-            if (neighbor === key) {
-                setSelfCycle.add(key);
-                cycles = true;
                 continue;
             }
 
@@ -162,7 +157,7 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
     const mapComponentRoot: Map<Node, Node> = new Map();
 
     // Map of root node to its components, collection of all the cycles keyed by their root
-    const mapComponents: Map<Node, Node[]> = new Map();
+    const mapComponents: Map<Node, string[]> = new Map();
 
     const getComponentRoot = (node: Node, nodeInfo: VisitedInfo): Node => {
         // Try get from map first
@@ -194,33 +189,15 @@ const getCycles = <I>(dependencies: DependenciesListRecord<I>): (keyof I & strin
         // Add given node to list of components for the component root
         const components = mapComponents.get(componentRoot);
         if (components === undefined) {
-            mapComponents.set(componentRoot, [node]);
+            mapComponents.set(componentRoot, [node.toString()]);
         } else {
-            components.push(node);
+            components.push(node.toString());
         }
     }
 
-    // Filtering out components with length == 1, they are either not part of a cycle, or a self-cycle, which we
-    // are covering below
-    const listNonSelfCycles: Node[][] = Array.from(mapComponents.values()).filter((list) => list.length > 1);
-
-    const listSelfCycles = Array.from(setSelfCycle.keys())
-        .filter((node) => {
-            // Self-cycle, node is not root of its component (component length must be > 1)
-            const parent = mapComponentRoot.get(node);
-            if (parent !== node) return false;
-
-            // Self-cycle, node is parent of root, look up component to check if length > 1
-            const component = mapComponents.get(node);
-            if (component !== undefined && component.length > 1) return false;
-
-            return true;
-        })
-        .map((node) => [node]);
-
-    const listCycles = listSelfCycles.concat(listNonSelfCycles);
-
-    return listCycles;
+    // Filtering out components with length == 1, they are either not part of a cycle, or a self-cycle
+    // (self-cycles cannot exist with the type system)
+    return Array.from(mapComponents.values()).filter((list) => list.length > 1);
 };
 
 /**
@@ -237,16 +214,12 @@ const anyCycilcDependencies = <I>(dependencies: DependenciesListRecord<I>): bool
 
     const visitaitonMap: Map<keyof I, (typeof VisitState)[keyof typeof VisitState]> = new Map();
 
-    const dfsVisit = (key: keyof I): boolean => {
+    const dfsVisit = <K extends keyof I>(key: K): boolean => {
         const neighbors = dependencies[key];
 
         if (neighbors.length > 0) {
             visitaitonMap.set(key, VisitState.VISITING);
             for (const neighbor of neighbors) {
-                if (neighbor == key) {
-                    return true;
-                }
-
                 const neighborVisitState = visitaitonMap.get(neighbor);
 
                 if (neighborVisitState === VisitState.VISITING) {

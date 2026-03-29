@@ -6,20 +6,20 @@ Relatively lightweight dependency injection tool
 
 ## Requirements
 
--   TypeScript ^5.9.3
--   ES2020 or later
+- TypeScript ^5.9.3
+- ES2020 or later
 
 ## Usage
 
 ### Terminology
 
--   Interface - Collection of objects, denoted by a unique name and a type, that have some dependency on each other
-    in order to be constructed
--   Members - Individual object in a interface, has a unique name and a type
--   Dependencies - For a given member, a list of other members which need to be constructed first, as this member
-    requires them during its creation
--   Module - Instructions describing how to construct each member given its dependencies
--   Injector - Finished implementation of interface which constructs members based on the provided module
+- Interface - Collection of objects, denoted by a unique name and a type, that have some dependency on each other
+  in order to be constructed
+- Members - Individual object in a interface, has a unique name and a type
+- Dependencies - For a given member, a list of other members which need to be constructed first, as this member
+  requires them during its creation
+- Module - Instructions describing how to construct each member given its dependencies
+- Injector - Finished implementation of interface which constructs members based on the provided module
 
 ### Basic usage
 
@@ -128,16 +128,12 @@ try {
             b: ['c'],
             c: ['a'],
 
-            // Self loop around `e`
-            d: ['e'],
-            e: ['e'],
+            // Two-way cycle loop between `e` and `d`
+            d: ['e', 'a'],
+            e: ['d'],
 
-            // Two-way cycle loop between `f` and `g`
-            f: ['g', 'a'],
-            g: ['f'],
-
-            // ^ `f` also points to `a`, but since we can't go back
-            // to `f` once within the `{a, b, c}` cycle, it's treated as a
+            // ^ `e` also points to `a`, but since we can't go back
+            // to `e` once within the `{a, b, c}` cycle, it's treated as a
             // separate cycle.
         },
         UNUSED,
@@ -152,7 +148,7 @@ try {
 // Log output:
 // CyclicDependencyError: At least one cycle found in provided dependencies
 //     ... stack trace here {
-//   cycles: [ [ 'e' ], [ 'f', 'g' ], [ 'a', 'b', 'c' ] ]
+//   cycles: [ [ 'd', 'e' ], [ 'a', 'b', 'c' ] ]
 // }
 ```
 
@@ -201,3 +197,9 @@ console.log(RightTriangleInjector.digest);
 // [RightTriangle] digest - constructed
 // 3^2 + 4^2 = 5^2
 ```
+
+## Changelogs
+
+### 1.1.0
+
+- Improved typing to disallow self-cycles in the type system instead of needing to check at runtime

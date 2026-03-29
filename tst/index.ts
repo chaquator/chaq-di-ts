@@ -133,22 +133,6 @@ test('Cycles', async (t) => {
     };
 
     for (const style of cycleCheckStyle) {
-        await t.test(`Self loop - ${style}`, () =>
-            assert.throws(
-                () =>
-                    makeInjectorFactory<{ a: number }>()(
-                        {
-                            a: ['a'],
-                        },
-                        UNUSED,
-                        {
-                            checkForCycles: style,
-                        },
-                    ),
-                (err) => validateCycleError(err, style, [['a']]),
-            ),
-        );
-
         await t.test(`2-way loop - ${style}`, () =>
             assert.throws(
                 () =>
@@ -205,7 +189,7 @@ test('Cycles', async (t) => {
                             e: ['a', 'f'],
                             f: ['g'],
                             g: ['f'],
-                            h: ['d', 'g', 'h'],
+                            h: ['d', 'g'],
                         },
                         UNUSED,
                         {
