@@ -1,6 +1,6 @@
 {
     "name": "chaq-di-ts",
-    "version": "1.1.1",
+    "version": "2.0.0",
     "description": "relatively lightweight dependency injection tool",
     "homepage": "https://github.com/chaquator/chaq-di-ts#readme",
     "bugs": {
@@ -19,7 +19,7 @@
     "scripts": {
         "build": "tsc",
         "test": "tsc && node --import=tsx --test ./tst/*.ts",
-        "prepack": "tsup"
+        "prepack": "npm run build && npm run test && tsup"
     },
     "devDependencies": {
         "@types/node": "^24.6.2",

@@ -2,22 +2,32 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+    EventType,
     CyclicDependencyError,
     makeInjectorFactory,
     type DependenciesListRecord,
     type DependencyInjectionOptions,
+    type Event,
     type MemberProviderModule,
 } from '../src/index.js';
 
-// Utility function for asserting on logs
-const increment = (map: Map<string, number>, ...keys: string[]) => {
-    for (const key of keys) {
-        const value = map.get(key);
-        if (value) {
-            map.set(key, value + 1);
-        } else {
-            map.set(key, 1);
-        }
+const verifyEvents = (listExpected: Event[], listActual: Event[]) => {
+    const fullMsg = (msg: string) =>
+        `${msg}. Expected: ${JSON.stringify(listExpected)}. Actual: ${JSON.stringify(listActual)}`;
+    const fieldMsg = (index: number, field: string) =>
+        fullMsg(`Elements at index ${index} do not match on field '${field}'`);
+
+    assert.equal(listExpected.length, listActual.length, fullMsg('Expected and actual list lengths do not match'));
+
+    for (let i = 0; i < listExpected.length; i = i + 1) {
+        const expected = listExpected[i];
+        const actual = listActual[i];
+
+        assert.ok(expected, fullMsg(`No element for expected list element ${i}`));
+        assert.ok(actual, fullMsg(`No element for actual list element ${i}`));
+
+        assert.deepStrictEqual(expected.member, actual.member, fieldMsg(i, 'member'));
+        assert.deepStrictEqual(expected.eventType, actual.eventType, fieldMsg(i, 'eventType'));
     }
 };
 
@@ -30,28 +40,21 @@ test('Logging and basic usage', async (t) => {
         digest: string;
     }
 
-    const mapExpectedLogs = new Map([
-        ['digest - get', 1],
-        ['a - get', 2],
-        ['b - get', 2],
-        ['c - get', 1],
+    const expectedEvents: Event[] = [
+        { member: 'digest', eventType: EventType.CONSTRUCTING },
+        { member: 'a', eventType: EventType.CONSTRUCTING },
+        { member: 'a', eventType: EventType.CONSTRUCTED, msDurationConstruct: -1 },
+        { member: 'b', eventType: EventType.CONSTRUCTING },
+        { member: 'b', eventType: EventType.CONSTRUCTED, msDurationConstruct: -1 },
+        { member: 'c', eventType: EventType.CONSTRUCTING },
+        { member: 'a', eventType: EventType.ALREADY_CONSTRUCTED },
+        { member: 'b', eventType: EventType.ALREADY_CONSTRUCTED },
+        { member: 'c', eventType: EventType.CONSTRUCTED, msDurationConstruct: -1 },
+        { member: 'digest', eventType: EventType.CONSTRUCTED, msDurationConstruct: -1 },
+    ];
 
-        ['digest - constructing', 1],
-        ['a - constructing', 1],
-        ['b - constructing', 1],
-        ['c - constructing', 1],
-
-        ['digest - constructed', 1],
-        ['a - constructed', 1],
-        ['b - constructed', 1],
-        ['c - constructed', 1],
-
-        ['a - already constructed', 1],
-        ['b - already constructed', 1],
-    ]);
-
-    const mapActualLogs: Map<string, number> = new Map();
-    const log = (statement: string) => increment(mapActualLogs, statement);
+    const actualEvents: Event[] = [];
+    const event = (event: Event) => actualEvents.push(event);
 
     const RightTriangleInjector = makeInjectorFactory<RightTriangle>()(
         {
@@ -67,7 +70,7 @@ test('Logging and basic usage', async (t) => {
             digest: ({ a, b, c }) => `${a}^2 + ${b}^2 = ${c}^2`,
         },
         {
-            log,
+            event,
         },
     );
 
@@ -76,7 +79,7 @@ test('Logging and basic usage', async (t) => {
         assert.deepStrictEqual(RightTriangleInjector.digest, '3^2 + 4^2 = 5^2');
 
         // Assert correct logs are emitted
-        assert.deepStrictEqual(mapActualLogs, mapExpectedLogs);
+        verifyEvents(expectedEvents, actualEvents);
     });
 
     // Retrieve digest again, and assert on updated logs
@@ -85,10 +88,11 @@ test('Logging and basic usage', async (t) => {
         assert.deepStrictEqual(RightTriangleInjector.digest, '3^2 + 4^2 = 5^2');
 
         // Increment logs based on retrieval
-        increment(mapExpectedLogs, 'digest - get', 'digest - already constructed');
+        // increment(mapExpectedLogs, 'digest - get', 'digest - already constructed');
+        expectedEvents.push({ member: 'digest', eventType: EventType.ALREADY_CONSTRUCTED });
 
         // Assert correct logs are emitted, after another retrieval
-        assert.deepStrictEqual(mapActualLogs, mapExpectedLogs);
+        verifyEvents(expectedEvents, actualEvents);
     });
 });
 
@@ -243,7 +247,7 @@ test('Cycles', async (t) => {
     }
 });
 
-test('Split usage', async (t) => {
+test('Split usage', async () => {
     /**
      * Test showing declaration of the interface, the dependencies, and finally the module separately, instead of all
      * inline.

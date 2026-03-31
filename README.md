@@ -169,27 +169,21 @@ const RightTriangleInjector = makeRightTriangleInjector(
         digest: ({ a, b, c }) => `${a}^2 + ${b}^2 = ${c}^2`,
     },
     {
-        log: (statement) =>
-            console.log(`[RightTriangle] ${statement}`),
+        event: ({ member, eventType }) =>
+            console.log(`[RightTriangle] ${member} - ${eventType.toLowerCase().replace('_', ' ')}`),
     },
 );
 
 console.log(RightTriangleInjector.digest);
 
 // Log output:
-// [RightTriangle] digest - get
 // [RightTriangle] digest - constructing
-// [RightTriangle] a - get
 // [RightTriangle] a - constructing
 // [RightTriangle] a - constructed
-// [RightTriangle] b - get
 // [RightTriangle] b - constructing
 // [RightTriangle] b - constructed
-// [RightTriangle] c - get
 // [RightTriangle] c - constructing
-// [RightTriangle] a - get
 // [RightTriangle] a - already constructed
-// [RightTriangle] b - get
 // [RightTriangle] b - already constructed
 // [RightTriangle] c - constructed
 // [RightTriangle] digest - constructed
@@ -204,17 +198,6 @@ module, it's necessary to let the dependencies object type be as precise as poss
 keyword to enforce autocomplete, and verify the type fits.
 
 ```TypeScript
-/**
- * Test showing declaration of the interface, the dependencies, and finally the module separately, instead of all
- * inline.
- *
- * DependenciesListRecord<T> lets you define dependencies for an interface T. MemberProviderModule<T, D> takes an
- * interface T, and a dependencies list record D, which is a dependencies list record of T.
- *
- * Then to make the injector, you pass the interface T as a template type to `makeInjectorFactory`, and then pass
- * the dependencies and corresponding module into the returned factory function.
- */
-
 interface FooBar {
     foo: string;
     bar: string;
@@ -222,18 +205,22 @@ interface FooBar {
     combined: string;
 }
 
+// DependenciesListRecord<T> lets you define dependencies for an interface T.
 const fooBarDependencies = {
     foo: [],
     bar: [],
     combined: ['foo', 'bar'],
 } satisfies DependenciesListRecord<FooBar>;
 
+// MemberProviderModule<T, D> takes an interface T, and a dependencies list record D, which is a dependencies list record of T.
 const fooBraModule: MemberProviderModule<FooBar, typeof fooBarDependencies> = {
     foo: () => 'foo',
     bar: () => 'bar',
     combined: ({ foo, bar }) => `${foo}${bar}`,
 };
 
+// Then to make the injector, you pass the interface T as a template type to `makeInjectorFactory`, and then pass
+// the dependencies and corresponding module into the returned factory function.
 const FooBarInjector = makeInjectorFactory<FooBar>()(fooBarDependencies, fooBraModule);
 
 console.log(FooBaerInjector.combined);
@@ -243,6 +230,11 @@ console.log(FooBaerInjector.combined);
 ```
 
 ## Changelogs
+
+### 2.0.0
+
+- Replace `log` callback option with `event` callback option, which provides the same set of events but in a structued
+  object for more flexible logging. Removing `option`, thus backwards incompatible, incrementing major version
 
 ### 1.1.0
 

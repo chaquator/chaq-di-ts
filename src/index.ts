@@ -240,6 +240,31 @@ const anyCycilcDependencies = <I>(dependencies: DependenciesListRecord<I>): bool
     return false;
 };
 
+export const EventType = {
+    CONSTRUCTING: 'CONSTRUCTING',
+    CONSTRUCTED: 'CONSTRUCTED',
+    ALREADY_CONSTRUCTED: 'ALREADY_CONSTRUCTED',
+} as const;
+
+interface BaseEvent {
+    member: string;
+}
+
+interface StartConstructingEvent extends BaseEvent {
+    eventType: typeof EventType.CONSTRUCTING;
+}
+
+interface NewlyConstructedEvent extends BaseEvent {
+    eventType: typeof EventType.CONSTRUCTED;
+    msDurationConstruct: number;
+}
+
+interface AlreadyConstructedEvent extends BaseEvent {
+    eventType: typeof EventType.ALREADY_CONSTRUCTED;
+}
+
+export type Event = StartConstructingEvent | NewlyConstructedEvent | AlreadyConstructedEvent;
+
 export interface DependencyInjectionOptions {
     /**
      * Check dependencies for cycles on creation of injector. Can be disabled in case of performance concerns.
@@ -254,10 +279,9 @@ export interface DependencyInjectionOptions {
     checkForCycles?: 'skip' | 'simple' | 'detailed';
 
     /**
-     * Logging callback for listening in on injector usage.
-     * @param statement Log statement from injector.
+     * Member event callback. See `Event` type.
      */
-    log?: (statement: string) => void;
+    event?: (event: Event) => void;
 }
 
 /**
@@ -299,23 +323,28 @@ export function makeInjectorFactory<I extends Record<string, any>>() {
             const memberDepsNames = dependencies[member];
 
             const get = () => {
-                if (options?.log) {
-                    options.log(`${member} - get`);
-                }
-
                 // Check map for if member was already made
                 const tryGet = mapModuleObjects.get(member);
 
                 if (tryGet != undefined) {
-                    if (options?.log) {
-                        options.log(`${member} - already constructed`);
+                    if (options?.event) {
+                        options.event({
+                            member,
+                            eventType: EventType.ALREADY_CONSTRUCTED,
+                        });
                     }
+
                     return tryGet;
                 }
 
-                if (options?.log) {
-                    options.log(`${member} - constructing`);
+                if (options?.event) {
+                    options.event({
+                        member,
+                        eventType: EventType.CONSTRUCTING,
+                    });
                 }
+
+                const msTimeStartConstruct = performance.now();
 
                 // Get all dependencies from the finished injector
                 // By the time we're actually reaching this code, getters for each member are populated,
@@ -330,11 +359,17 @@ export function makeInjectorFactory<I extends Record<string, any>>() {
                 const memberProvider = module[member as keyof MemberProviderModule<I, D>];
                 const memberObject = memberProvider(memberDeps);
 
+                const msTimeFinishConstruct = performance.now();
+
                 // Set in map for later retrieval
                 mapModuleObjects.set(member, memberObject);
 
-                if (options?.log) {
-                    options.log(`${member} - constructed`);
+                if (options?.event) {
+                    options.event({
+                        member,
+                        eventType: EventType.CONSTRUCTED,
+                        msDurationConstruct: msTimeFinishConstruct - msTimeStartConstruct,
+                    });
                 }
 
                 return memberObject;
